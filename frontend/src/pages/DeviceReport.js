@@ -109,7 +109,9 @@ const DeviceReport = () => {
     setHistoryLoading(true);
     const url = `${API_BASE}/api/cihaz-gecmisi/?mac=${mac}&start=${startDate}:00Z&end=${endDate}:00Z`;
 
-    fetch(url)
+    fetch(url, {
+      credentials: 'include'
+    })
       .then(res => res.json())
       .then(data => {
         setHistoryData(data);
@@ -140,7 +142,9 @@ const DeviceReport = () => {
   const fetchKizginlik = useCallback(() => {
     if (!mac) return;
     setKizginlikLoading(true);
-    fetch(`${API_BASE}/api/kizginlik-raporu/?mac=${mac}`)
+    fetch(`${API_BASE}/api/kizginlik-raporu/?mac=${mac}`, {
+      credentials: 'include'
+    })
       .then(res => res.json())
       .then(data => {
         setKizginlikData(data);
@@ -155,7 +159,9 @@ const DeviceReport = () => {
   useEffect(() => {
     if (mac) {
       // Sadece cihaz bilgisini çek, bildirim (notification) atma!
-      fetch(`${API_BASE}/api/cihazlar/`)
+      fetch(`${API_BASE}/api/cihazlar/`, {
+        credentials: 'include'
+      })
         .then(res => res.json())
         .then(data => {
           const device = data.find(d => d.mac_address === mac || d.mac === mac);

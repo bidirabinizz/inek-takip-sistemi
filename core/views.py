@@ -1,6 +1,6 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import AccelerometerData, Device, GunlukAktivite
+from .models import AccelerometerData, Device, GunlukAktivite, SystemSettings
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware, is_naive, localtime
@@ -443,3 +443,111 @@ def cihaz_status(request, mac):
         return Response(response)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
+
+
+# ─────────────────────────────────────────────
+#  SİSTEM AYARLARI (Singleton)
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+def get_settings(request):
+    """
+    Sistem ayarlarını döner (Singleton).
+    Sadece giriş yapmış kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    settings = SystemSettings.get_instance()
+    return Response(settings.to_dict(), status=200)
+
+
+@api_view(['POST'])
+def update_settings(request):
+    """
+    Sistem ayarlarını günceller (Singleton).
+    Sadece giriş yapmış kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    settings = SystemSettings.get_instance()
+    
+    # Gelen veriyi güncelle
+    allowed_fields = [
+        'EXCITED_MAG', 'WALK_STD_MIN', 'WALK_STD_MAX', 'WALK_PEAKS_MIN',
+        'STILL_STD_MAX', 'STILL_MAG_MIN', 'STILL_MAG_MAX',
+        'LYING_STILL_MIN_MINUTES', 'LYING_NIGHT_START', 'LYING_NIGHT_END',
+        'MAG_PEAK_THRESHOLD', 'MAG_VALLEY_THRESHOLD', 'COOLDOWN_MS', 'WINDOW_SIZE',
+        'FETCH_INTERVAL_MS'
+    ]
+    
+    for field in allowed_fields:
+        if field in request.data:
+            value = request.data[field]
+            # Integer alanları kontrol et
+            if field in ['WALK_PEAKS_MIN', 'LYING_STILL_MIN_MINUTES', 'LYING_NIGHT_START', 'LYING_NIGHT_END', 'COOLDOWN_MS', 'WINDOW_SIZE']:
+                try:
+                    setattr(settings, field, int(value))
+                except (ValueError, TypeError):
+                    return Response({"error": f"Invalid value for {field}"}, status=400)
+            else:
+                # Float alanlar
+                try:
+                    setattr(settings, field, float(value))
+                except (ValueError, TypeError):
+                    return Response({"error": f"Invalid value for {field}"}, status=400)
+    
+    settings.save()
+    return Response({
+        "status": "success",
+        "message": "Settings updated",
+        "settings": settings.to_dict()
+    }, status=200)
+
+
+# ─────────────────────────────────────────────
+#  KULLANICI YÖNETİMİ — Login & Logout
+# ─────────────────────────────────────────────
+@api_view(['POST'])
+def custom_login(request):
+    """
+    Kullanıcı girişi için basit bir endpoint.
+    Frontend'den gelen username ve password ile giriş yapar.
+    """
+    from django.contrib.auth import authenticate, login
+    from django.views.decorators.csrf import csrf_exempt
+    
+    username = request.data.get('username')
+    password = request.data.get('password')
+    
+    if not username or not password:
+        return Response({"error": "Kullanıcı adı ve şifre gerekli"}, status=400)
+    
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
+        login(request, user)
+        return Response({
+            "status": "success",
+            "message": f"Hoş geldiniz, {user.username}",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+            }
+        }, status=200)
+    else:
+        return Response({"error": "Geçersiz kullanıcı adı veya şifre"}, status=401)
+
+
+@api_view(['POST'])
+def custom_logout(request):
+    """
+    Kullanıcı çıkışı için endpoint.
+    """
+    from django.contrib.auth import logout
+    
+    logout(request)
+    return Response({
+        "status": "success",
+        "message": "Başarıyla çıkış yapıldı"
+    }, status=200)

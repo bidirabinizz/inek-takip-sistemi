@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useAppContext } from './context/AppContext';
+import { useAuth, AuthProvider } from './context/AuthContext';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Brush
@@ -10,35 +11,8 @@ import Navbar from './components/Navbar';
 import DevicesView from './pages/Devices';
 import DeviceReport from './pages/DeviceReport';
 import { AppProvider } from './context/AppContext';
-
-// ─────────────────────────────────────────────
-//  PEAK DETECTION AYARLARI (🚀 GRAFİĞE GÖRE DÜZELTİLDİ)
-// ─────────────────────────────────────────────
-const CONFIG = {
-  MAG_PEAK_THRESHOLD:   11.5, // 12.8'den 11.5'e çektik, artık adımları yakalayacak!
-  MAG_VALLEY_THRESHOLD: 9.5,  // 10.0'dan 9.5'e çektik
-  COOLDOWN_MS:          650,
-  WINDOW_SIZE:          5,
-  FETCH_INTERVAL_MS:    700,
-};
-
-// ─────────────────────────────────────────────
-//  AKTİVİTE AYARLARI (🚀 HASSASİYET AYARLANDI)
-// ─────────────────────────────────────────────
-const ACTIVITY_CONFIG = {
-  WINDOW:                  30,
-  EXCITED_MAG:             25.0, 
-  EXCITED_COUNT:           3,
-  WALK_STD_MIN:            2.0,  // 🚀 0.8'di 2.0 yaptık. Masadaki titremeyi yürüme sanmayacak!
-  WALK_STD_MAX:            15.0,
-  WALK_PEAKS_MIN:          1,    
-  STILL_STD_MAX:           2,  // 🚀 0.5'ti 1.5 yaptık. Gürültüyü affedip "Duruyor" diyecek.
-  STILL_MAG_MIN:           7.5,  
-  STILL_MAG_MAX:           12.5, 
-  LYING_STILL_MIN_MINUTES: 2,   
-  LYING_NIGHT_START:       22,
-  LYING_NIGHT_END:         6,
-};
+import LoginForm from './components/LoginForm';
+import Settings from './pages/Settings';
 
 const ACTIVITY_META = {
   LYING: { label: "YATIYOR", icon: "🌙", color: "#818cf8", desc: "Uzun süreli hareketsizlik veya gece saati" },
@@ -47,6 +21,22 @@ const ACTIVITY_META = {
   EXCITED: { label: "KIZGIN / ATLIYOR", icon: "⚡", color: "#f87171", desc: "Yüksek ani ivme patlaması!" },
   UNKNOWN: { label: "BİLİNMİYOR", icon: "❓", color: "#9ca3af", desc: "Veri toplanıyor..." },
 };
+
+// 🚀 CSRF Token Okuyucu Fonksiyon
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
 
 function movingAverage(arr, w) {
   return arr.map((_, i) => {
@@ -65,53 +55,53 @@ function mean(arr) {
   return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 }
 
-function isNightHour() {
+function isNightHour(settings) {
   const h = new Date().getHours();
-  return h >= ACTIVITY_CONFIG.LYING_NIGHT_START || h < ACTIVITY_CONFIG.LYING_NIGHT_END;
+  return h >= settings.LYING_NIGHT_START || h < settings.LYING_NIGHT_END;
 }
 
 // 🚀 OBYE DEĞİL, DİREKT SAYI DİZİSİ ALIYOR
-function classifyActivityRaw(mags, recentPeakCount) {
+function classifyActivityRaw(mags, recentPeakCount, settings) {
   if (!mags || mags.length < 10) return "UNKNOWN";
 
   const avgMag = mean(mags);
   const magStd = stdDev(mags);
 
-  const excitedCount = mags.filter(m => m > ACTIVITY_CONFIG.EXCITED_MAG).length;
-  if (excitedCount >= ACTIVITY_CONFIG.EXCITED_COUNT) return "EXCITED";
+  const excitedCount = mags.filter(m => m > settings.EXCITED_MAG).length;
+  if (excitedCount >= settings.EXCITED_COUNT) return "EXCITED";
 
-  const stdInWalkRange = magStd >= ACTIVITY_CONFIG.WALK_STD_MIN && magStd <= ACTIVITY_CONFIG.WALK_STD_MAX;
-  const hasRhythm      = recentPeakCount >= ACTIVITY_CONFIG.WALK_PEAKS_MIN;
+  const stdInWalkRange = magStd >= settings.WALK_STD_MIN && magStd <= settings.WALK_STD_MAX;
+  const hasRhythm      = recentPeakCount >= settings.WALK_PEAKS_MIN;
 
   if (stdInWalkRange && hasRhythm) return "WALKING";
 
-  if (magStd < ACTIVITY_CONFIG.STILL_STD_MAX &&
-      avgMag > ACTIVITY_CONFIG.STILL_MAG_MIN &&
-      avgMag < ACTIVITY_CONFIG.STILL_MAG_MAX) return "STILL";
+  if (magStd < settings.STILL_STD_MAX &&
+      avgMag > settings.STILL_MAG_MIN &&
+      avgMag < settings.STILL_MAG_MAX) return "STILL";
 
   return "UNKNOWN";
 }
 
-function detectSteps(smoothedMags, timestamps, stateRef, lastStepTimeRef) {
+function detectSteps(smoothedMags, timestamps, stateRef, lastStepTimeRef, settings) {
   let newSteps = 0;
   for (let i = 0; i < smoothedMags.length; i++) {
     const mag  = smoothedMags[i];
     const time = timestamps[i];
     switch (stateRef.current) {
       case "VALLEY":
-        if (mag > CONFIG.MAG_PEAK_THRESHOLD) stateRef.current = "RISING";
+        if (mag > settings.MAG_PEAK_THRESHOLD) stateRef.current = "RISING";
         break;
       case "RISING":
-        if (mag < CONFIG.MAG_PEAK_THRESHOLD) stateRef.current = "FALLING";
+        if (mag < settings.MAG_PEAK_THRESHOLD) stateRef.current = "FALLING";
         break;
       case "FALLING":
-        if (mag <= CONFIG.MAG_VALLEY_THRESHOLD) {
-          if (time - lastStepTimeRef.current >= CONFIG.COOLDOWN_MS) {
+        if (mag <= settings.MAG_VALLEY_THRESHOLD) {
+          if (time - lastStepTimeRef.current >= settings.COOLDOWN_MS) {
             newSteps++;
             lastStepTimeRef.current = time;
           }
           stateRef.current = "VALLEY";
-        } else if (mag > CONFIG.MAG_PEAK_THRESHOLD) stateRef.current = "RISING";
+        } else if (mag > settings.MAG_PEAK_THRESHOLD) stateRef.current = "RISING";
         break;
       default:
         stateRef.current = "VALLEY";
@@ -147,7 +137,8 @@ function KpiCard({ label, value, unit, color, icon, big }) {
 //  DASHBOARD
 // ─────────────────────────────────────────────
 function Dashboard() {
-  const [availableDevicesData, setAvailableDevicesData] = useState([]); 
+  const { settings, fetchSettings } = useAppContext();
+  const [availableDevicesData, setAvailableDevicesData] = useState([]);
   const [chartData,        setChartData]        = useState([]);
   const [steps,            setSteps]            = useState(0);
   const [status,           setStatus]           = useState("connecting");
@@ -166,10 +157,16 @@ function Dashboard() {
   // 🚀 React kilitlenmesini çözen mucize referans!
   const recentMagsRef      = useRef([]);
 
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
+
   const fetchAktiviteDurum = useCallback(async (mac) => {
     if (!mac) return;
     try {
-      const res = await fetch(`${API_BASE}/api/aktivite-durum/?mac=${mac}`);
+      const res = await fetch(`${API_BASE}/api/aktivite-durum/?mac=${mac}`, {
+        credentials: 'include'
+      });
       const data = await res.json();
       if (data.final_activity) setActivity(data.final_activity);
       if (data.lying_total_mins !== undefined) setLyingMins(data.lying_total_mins);
@@ -193,14 +190,18 @@ function Dashboard() {
 
   const fetchDeviceNames = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/cihazlar/`);
+      const res = await fetch(`${API_BASE}/api/cihazlar/`, {
+        credentials: 'include'
+      });
       if (res.ok) setAvailableDevicesData(await res.json());
     } catch (err) { console.error("İsim çekme hatası:", err); }
   }, []);
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/gercek-sensor/`);
+      const res = await fetch(`${API_BASE}/api/gercek-sensor/`, {
+        credentials: 'include'
+      });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const json = await res.json();
       setStatus("live");
@@ -226,10 +227,10 @@ function Dashboard() {
 
       const sorted     = [...newRecords].sort((a, b) => new Date(a.time) - new Date(b.time));
       const rawMags    = sorted.map(d => Math.sqrt(d.x**2 + d.y**2 + d.z**2));
-      const smoothed   = movingAverage(rawMags, CONFIG.WINDOW_SIZE);
+      const smoothed   = movingAverage(rawMags, settings.WINDOW_SIZE);
       const timestamps = sorted.map(d => new Date(d.time).getTime());
 
-      const newSteps = detectSteps(smoothed, timestamps, peakStateRef, lastStepTimeRef);
+      const newSteps = detectSteps(smoothed, timestamps, peakStateRef, lastStepTimeRef, settings);
       const now = Date.now();
       
       if (newSteps > 0) {
@@ -237,8 +238,10 @@ function Dashboard() {
         recentStepTimesRef.current.push(...Array(newSteps).fill(now));
         setDebugInfo(prev => prev ? { ...prev, stillMn: 0 } : { stillMn: 0 });
         fetch(`${API_BASE}/api/cihaz-guncelle/`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json", 'X-CSRFToken': getCookie('csrftoken')},
           body: JSON.stringify({ mac: currentMac, steps: newSteps }),
+          
+          credentials: 'include'
         }).catch(() => {});
       }
 
@@ -246,9 +249,9 @@ function Dashboard() {
       lastFetchedTimeRef.current = sorted[sorted.length - 1].time;
 
       // 🚀 MATEMATİK VE SUNUCU İŞLEMLERİ ARTIK GRAFİK GÜNCELLEMESİNDEN BAĞIMSIZ!
-      recentMagsRef.current = [...recentMagsRef.current, ...rawMags].slice(-ACTIVITY_CONFIG.WINDOW);
+      recentMagsRef.current = [...recentMagsRef.current, ...rawMags].slice(-settings.WINDOW);
       const recentPeakCount = recentStepTimesRef.current.length;
-      const rawActivity = classifyActivityRaw(recentMagsRef.current, recentPeakCount);
+      const rawActivity = classifyActivityRaw(recentMagsRef.current, recentPeakCount, settings);
 
       if (recentMagsRef.current.length >= 5) {
         setDebugInfo(prev => ({
@@ -256,20 +259,22 @@ function Dashboard() {
           magStd: stdDev(recentMagsRef.current).toFixed(3),
           avgMag: mean(recentMagsRef.current).toFixed(3),
           peaks8s: recentPeakCount,
-          night: isNightHour() ? "EVET" : "HAYIR"
+          night: isNightHour(settings) ? "EVET" : "HAYIR"
         }));
       }
 
       // Backend'e Kararı Gönder
       fetch(`${API_BASE}/api/aktivite-guncelle/`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", 'X-CSRFToken': getCookie('csrftoken') },
         body: JSON.stringify({
           mac: currentMac,
           steps: newSteps,
           raw_activity: rawActivity,
           data_start: sorted[0].time,
+          
           data_end: sorted[sorted.length - 1].time
         }),
+        credentials: 'include'
       })
       .then(r => r.json())
         .then(data => {
@@ -300,9 +305,9 @@ function Dashboard() {
   useEffect(() => {
     fetchDeviceNames();
     fetchData();
-    const id = setInterval(fetchData, CONFIG.FETCH_INTERVAL_MS);
+    const id = setInterval(fetchData, settings.FETCH_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [fetchData, fetchDeviceNames]);
+  }, [fetchData, fetchDeviceNames, settings]);
 
   const resetSteps = () => {
     setSteps(0); peakStateRef.current = "VALLEY"; lastStepTimeRef.current = 0;
@@ -348,11 +353,11 @@ function Dashboard() {
         {debugInfo && (
           <div style={{ marginLeft: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 28px", fontSize: 11 }}>
             {[
-              ["Mag Std",  debugInfo.magStd,  "#fbbf24", `Yürüyüş: ${ACTIVITY_CONFIG.WALK_STD_MIN}–${ACTIVITY_CONFIG.WALK_STD_MAX}`],
-              ["Avg Mag",  debugInfo.avgMag,  "#00ffb4", `Durağan: ${ACTIVITY_CONFIG.STILL_MAG_MIN}–${ACTIVITY_CONFIG.STILL_MAG_MAX}`],
-              ["8s Adım",  debugInfo.peaks8s, "#f472b6", `Min: ${ACTIVITY_CONFIG.WALK_PEAKS_MIN}`],
-              ["Durağan",  `${debugInfo.stillMn} dk`, "#818cf8", `≥${ACTIVITY_CONFIG.LYING_STILL_MIN_MINUTES}dk = YATIYOR`],
-              ["Gece mi?", debugInfo.night,   "#60a5fa", "22:00–06:00 = YATIYOR"],
+              ["Mag Std",  debugInfo.magStd,  "#fbbf24", `Yürüyüş: ${settings.WALK_STD_MIN}–${settings.WALK_STD_MAX}`],
+              ["Avg Mag",  debugInfo.avgMag,  "#00ffb4", `Durağan: ${settings.STILL_MAG_MIN}–${settings.STILL_MAG_MAX}`],
+              ["8s Adım",  debugInfo.peaks8s, "#f472b6", `Min: ${settings.WALK_PEAKS_MIN}`],
+              ["Durağan",  `${debugInfo.stillMn} dk`, "#818cf8", `≥${settings.LYING_STILL_MIN_MINUTES}dk = YATIYOR`],
+              ["Gece mi?", debugInfo.night,   "#60a5fa", `22:00–${settings.LYING_NIGHT_END}:00 = YATIYOR`],
             ].map(([k, v, c, hint]) => (
               <div key={k} title={hint}><span style={{ color: "#4a6070" }}>{k}: </span><span style={{ color: c, fontWeight: 600 }}>{v}</span></div>
             ))}
@@ -364,8 +369,8 @@ function Dashboard() {
         <KpiCard label="ONAYLANAN ADIM" value={steps} unit="adım" color="#00ffb4" icon="🦶" big />
         <KpiCard label="AKTİVİTE" value={`${actMeta.icon} ${actMeta.label}`} unit="mevcut durum" color={actMeta.color} icon="🐄" />
         <KpiCard label="YATMA SÜRESİ" value={lyingMins > 0 ? `${lyingMins} dk` : "—"} unit="bugün toplam" color="#818cf8" icon="💤" />
-        <KpiCard label="GECE MODU" value={isNightHour() ? "AKTİF" : "PASİF"} unit={isNightHour() ? "22:00–06:00" : "Gündüz"} color={isNightHour() ? "#818cf8" : "#4a6070"} icon="🌙" />
-        <KpiCard label="TEPE EŞİĞİ" value={CONFIG.MAG_PEAK_THRESHOLD.toFixed(1)} unit="m/s²" color="#fbbf24" icon="📈" />
+        <KpiCard label="GECE MODU" value={isNightHour(settings) ? "AKTİF" : "PASİF"} unit={isNightHour(settings) ? `${settings.LYING_NIGHT_START}:00–${String(settings.LYING_NIGHT_END).padStart(2, '0')}:00` : "Gündüz"} color={isNightHour(settings) ? "#818cf8" : "#4a6070"} icon="🌙" />
+        <KpiCard label="TEPE EŞİĞİ" value={settings.MAG_PEAK_THRESHOLD.toFixed(1)} unit="m/s²" color="#fbbf24" icon="📈" />
         <KpiCard label="AKTİF SENSÖR" value={selectedDevice || "—"} unit="MAC" color="#a78bfa" icon="📡" />
       </div>
 
@@ -388,9 +393,9 @@ function Dashboard() {
             <XAxis dataKey="timeLabel" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={{ stroke: "rgba(255,255,255,0.06)" }} interval="preserveStartEnd" />
             <YAxis domain={[0, 20]} tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} width={32} />
             <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={CONFIG.MAG_PEAK_THRESHOLD} stroke="#fbbf24" strokeDasharray="4 4" strokeOpacity={0.5} label={{ value: "PEAK", position: "insideTopRight", fontSize: 9, fill: "#fbbf24" }} />
-            <ReferenceLine y={CONFIG.MAG_VALLEY_THRESHOLD} stroke="#f472b6" strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: "VALLEY", position: "insideBottomRight", fontSize: 9, fill: "#f472b6" }} />
-            <ReferenceLine y={ACTIVITY_CONFIG.EXCITED_MAG} stroke="#f87171" strokeDasharray="6 3" strokeOpacity={0.3} label={{ value: "KIZGINLIK", position: "insideTopLeft", fontSize: 9, fill: "#f87171" }} />
+            <ReferenceLine y={settings.MAG_PEAK_THRESHOLD} stroke="#fbbf24" strokeDasharray="4 4" strokeOpacity={0.5} label={{ value: "PEAK", position: "insideTopRight", fontSize: 9, fill: "#fbbf24" }} />
+            <ReferenceLine y={settings.MAG_VALLEY_THRESHOLD} stroke="#f472b6" strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: "VALLEY", position: "insideBottomRight", fontSize: 9, fill: "#f472b6" }} />
+            <ReferenceLine y={settings.EXCITED_MAG} stroke="#f87171" strokeDasharray="6 3" strokeOpacity={0.3} label={{ value: "KIZGINLIK", position: "insideTopLeft", fontSize: 9, fill: "#f87171" }} />
             <Line type="monotone" dataKey="rawMag" stroke="rgba(100,120,140,0.45)" strokeWidth={1} dot={false} isAnimationActive={false} name="Ham Mag" />
             <Line type="monotone" dataKey="smoothMag" stroke="#00ffb4" strokeWidth={2.5} dot={false} isAnimationActive={false} name="Filtrelenmiş" />
             <Line type="monotone" dataKey="z" stroke="#7dd3fc" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Z" />
@@ -401,22 +406,22 @@ function Dashboard() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, margin: "0 36px 36px" }}>
         <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(251,191,36,0.15)", borderRadius: 12, padding: "20px 24px" }}>
-          <div style={{ fontSize: 10, letterSpacing: 3, color: "#fbbf24", opacity: 0.7, marginBottom: 4 }}>HİBRİT AKTİVİTE KALİBRASYON REHBERİ</div>
+          <div style={{ fontSize: 10, letterSpacing: 3, color: "#fbbf24", opacity: 0.7, marginBottom: 4 }}>HİBRİD AKTİVİTE KALİBRASYON REHBERİ</div>
           <div style={{ fontSize: 11, color: "#4a6070", marginBottom: 14 }}>Debug panelini izleyerek eşikleri güncelle. Yatma süresi artık sunucuda tutulur — tüm cihazlarda senkronize görünür.</div>
           <div style={{ padding: "12px 16px", marginBottom: 16, background: "rgba(129,140,248,0.06)", border: "1px solid rgba(129,140,248,0.2)", borderRadius: 8, fontSize: 12, lineHeight: 2 }}>
             <div style={{ color: "#818cf8", fontWeight: 700, marginBottom: 4 }}>Karar Ağacı:</div>
             <div><span style={{ color: "#f87171" }}>EXCITED_MAG aşıldı</span> → ⚡ Kızgın/Atlıyor</div>
             <div><span style={{ color: "#fbbf24" }}>Std yüksek + Adım var</span> → 🚶 Yürüyor</div>
             <div><span style={{ color: "#818cf8" }}>Std düşük + Gece (22-06)</span> → 🌙 Yatıyor</div>
-            <div><span style={{ color: "#818cf8" }}>Std düşük + Gündüz + ≥{ACTIVITY_CONFIG.LYING_STILL_MIN_MINUTES} dk</span> → 🌙 Yatıyor</div>
-            <div><span style={{ color: "#60a5fa" }}>Std düşük + Gündüz + &lt;{ACTIVITY_CONFIG.LYING_STILL_MIN_MINUTES} dk</span> → 🐄 Ayakta Durağan</div>
+            <div><span style={{ color: "#818cf8" }}>Std düşük + Gündüz + ≥{settings.LYING_STILL_MIN_MINUTES} dk</span> → 🌙 Yatıyor</div>
+            <div><span style={{ color: "#60a5fa" }}>Std düşük + Gündüz + {settings.LYING_STILL_MIN_MINUTES} dk</span> → 🐄 Ayakta Durağan</div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 32px", fontSize: 12, color: "#8899aa", lineHeight: 2 }}>
             {[
-              ["EXCITED_MAG", ACTIVITY_CONFIG.EXCITED_MAG, "Kızgın anındaki max Avg Mag"],
-              ["WALK_STD_MIN", ACTIVITY_CONFIG.WALK_STD_MIN, "Yürürken Mag Std minimumu"],
-              ["STILL_STD_MAX", ACTIVITY_CONFIG.STILL_STD_MAX, "Durağan haldeki max Std"],
-              ["LYING_STILL_MIN", ACTIVITY_CONFIG.LYING_STILL_MIN_MINUTES, "Gündüz yatma eşiği (dk)"],
+              ["EXCITED_MAG", settings.EXCITED_MAG, "Kızgın anındaki max Avg Mag"],
+              ["WALK_STD_MIN", settings.WALK_STD_MIN, "Yürürken Mag Std minimumu"],
+              ["STILL_STD_MAX", settings.STILL_STD_MAX, "Durağan haldeki max Std"],
+              ["LYING_STILL_MIN", settings.LYING_STILL_MIN_MINUTES, "Gündüz yatma eşiği (dk)"],
             ].map(([k, v, desc]) => (
               <div key={k}><span style={{ color: "#fbbf24", fontWeight: 600 }}>{k}: </span><span style={{ color: "#c9d6e8" }}>{v} </span><span style={{ color: "#6b7280" }}>— {desc}</span></div>
             ))}
@@ -437,16 +442,31 @@ function Dashboard() {
 
 function AppContent() {
   const { theme } = useAppContext(); 
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
+        <div className="text-white text-xl">Yükleniyor...</div>
+      </div>
+    );
+  }
+
   return (
     <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-mono`}>
       <div className="app-container">
         <Navbar />
         <main className="pt-2">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/devices" element={<DevicesView />} />
-            <Route path="/report/:mac" element={<DeviceReport />} />
-          </Routes>
+          {isAuthenticated ? (
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/devices" element={<DevicesView />} />
+              <Route path="/report/:mac" element={<DeviceReport />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          ) : (
+            <LoginForm />
+          )}
         </main>
       </div>
     </div>
@@ -457,7 +477,9 @@ export default function App() {
   return (
     <Router>
       <AppProvider>
-        <AppContent /> 
+        <AuthProvider>
+          <AppContent /> 
+        </AuthProvider>
       </AppProvider>
     </Router>
   );

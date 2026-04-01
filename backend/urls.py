@@ -11,4 +11,10 @@ urlpatterns = [
     path('api/aktivite-guncelle/', views.aktivite_guncelle),
     path('api/kizginlik-raporu/',  views.kizginlik_raporu),
     path('api/aktivite-durum/',    views.aktivite_durum),   # ← artık çalışır
+    path('cihaz-status/<str:mac>/', views.cihaz_status, name='cihaz_status'),
+    path('api/cihazlar-heatmap/', views.cihazlar_heatmap, name='cihazlar_heatmap'),
+    path('api/auth/login/',        views.custom_login),
+    path('api/auth/logout/',       views.custom_logout),
+    path('api/settings/',          views.get_settings),
+    path('api/settings/update/',  views.update_settings),
 ]

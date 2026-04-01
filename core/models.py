@@ -66,3 +66,57 @@ class GunlukAktivite(models.Model):
             elapsed = int((timezone.now() - self.lying_start_time).total_seconds() / 60)
             total += elapsed
         return total
+
+
+class SystemSettings(models.Model):
+    """
+    Singleton model - her zaman tek bir kayıt olacak.
+    Aktivite tanıma algoritmasının eşik değerlerini saklar.
+    """
+    EXCITED_MAG = models.FloatField(default=25.0)
+    WALK_STD_MIN = models.FloatField(default=2.0)
+    WALK_STD_MAX = models.FloatField(default=15.0)
+    WALK_PEAKS_MIN = models.IntegerField(default=1)
+    STILL_STD_MAX = models.FloatField(default=2.0)
+    STILL_MAG_MIN = models.FloatField(default=7.5)
+    STILL_MAG_MAX = models.FloatField(default=12.5)
+    LYING_STILL_MIN_MINUTES = models.IntegerField(default=2)
+    LYING_NIGHT_START = models.IntegerField(default=22)
+    LYING_NIGHT_END = models.IntegerField(default=6)
+    MAG_PEAK_THRESHOLD = models.FloatField(default=11.5)
+    MAG_VALLEY_THRESHOLD = models.FloatField(default=9.5)
+    COOLDOWN_MS = models.IntegerField(default=650)
+    WINDOW_SIZE = models.IntegerField(default=5)
+    FETCH_INTERVAL_MS = models.IntegerField(default=700)
+
+    class Meta:
+        db_table = 'SystemSettings'
+
+    def __str__(self):
+        return "System Settings (Singleton)"
+
+    @classmethod
+    def get_instance(cls):
+        """Singleton pattern: her zaman tek kayıt döner"""
+        instance, created = cls.objects.get_or_create(pk=1)
+        return instance
+
+    def to_dict(self):
+        """Ayarları dictionary olarak döner"""
+        return {
+            'EXCITED_MAG': self.EXCITED_MAG,
+            'WALK_STD_MIN': self.WALK_STD_MIN,
+            'WALK_STD_MAX': self.WALK_STD_MAX,
+            'WALK_PEAKS_MIN': self.WALK_PEAKS_MIN,
+            'STILL_STD_MAX': self.STILL_STD_MAX,
+            'STILL_MAG_MIN': self.STILL_MAG_MIN,
+            'STILL_MAG_MAX': self.STILL_MAG_MAX,
+            'LYING_STILL_MIN_MINUTES': self.LYING_STILL_MIN_MINUTES,
+            'LYING_NIGHT_START': self.LYING_NIGHT_START,
+            'LYING_NIGHT_END': self.LYING_NIGHT_END,
+            'MAG_PEAK_THRESHOLD': self.MAG_PEAK_THRESHOLD,
+            'MAG_VALLEY_THRESHOLD': self.MAG_VALLEY_THRESHOLD,
+            'COOLDOWN_MS': self.COOLDOWN_MS,
+            'WINDOW_SIZE': self.WINDOW_SIZE,
+            'FETCH_INTERVAL_MS': self.FETCH_INTERVAL_MS,
+        }

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { BellIcon, Bars3Icon, XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { BellIcon, Bars3Icon, XMarkIcon, MagnifyingGlassIcon, ArrowRightOnRectangleIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAppContext } from '../context/AppContext'; // Context import
+import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 // DİKKAT: activeTab ve setActiveTab kısımlarını sildik, artık onlara gerek yok!
 const Navbar = () => {
-  const { theme, toggleTheme, notifications, addNotification, searchQuery, setSearchQuery } = useAppContext(); // Context sync
+  const { theme, toggleTheme, notifications, addNotification, searchQuery, setSearchQuery } = useAppContext();
+  const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate(); 
   const location = useLocation();
   
@@ -15,6 +17,7 @@ const Navbar = () => {
   const tabs = [
     { id: 'dashboard', path: '/', label: '📊 Canlı Takip', icon: '📊' },
     { id: 'devices', path: '/devices', label: '📡 Cihazlar', icon: '📡' },
+    { id: 'settings', path: '/settings', label: '⚙️ Ayarlar', icon: '⚙️' },
   ];
 
   const toggleMobileMenu = () => setMobileOpen(!mobileOpen);
@@ -22,6 +25,11 @@ const Navbar = () => {
   const filteredTabs = tabs.filter(tab => 
     tab.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
 
   return (
     <nav className="bg-gradient-to-r from-cyber-dark to-cyber-darkBlue border-b border-cyber-green/20 shadow-2xl shadow-cyber-green/10 backdrop-blur-md sticky top-0 z-50">
@@ -93,6 +101,16 @@ const Navbar = () => {
               </span>
             )}
           </button>
+          {isAuthenticated && (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-500/30 hover:border-red-500/50 text-red-300 hover:text-red-200 rounded-xl transition-all duration-200 text-sm font-medium"
+              title="Çıkış Yap"
+            >
+              <ArrowRightOnRectangleIcon className="h-5 w-5" />
+              <span className="hidden lg:inline">Çıkış Yap</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -150,6 +168,18 @@ const Navbar = () => {
                   </button>
                 );
               })}
+              {isAuthenticated && (
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setMobileOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl transition-all text-red-300 hover:text-red-200 hover:bg-red-900/20 border border-red-500/20"
+                >
+                  <ArrowRightOnRectangleIcon className="h-5 w-5" />
+                  <span className="font-semibold">Çıkış Yap</span>
+                </button>
+              )}
             </div>
           </div>
         )}

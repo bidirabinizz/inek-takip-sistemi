@@ -14,7 +14,9 @@ const DevicesView = () => {
   };
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/cihazlar/`)
+    fetch(`${API_BASE}/api/cihazlar/`, {
+      credentials: 'include'
+    })
       .then(res => res.json())
       .then(data => {
         setDevices(data);
