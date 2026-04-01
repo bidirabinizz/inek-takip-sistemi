@@ -1,6 +1,6 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import AccelerometerData, Device, GunlukAktivite, SystemSettings
+from .models import AccelerometerData, Device, GunlukAktivite, SystemSettings, Animal
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware, is_naive, localtime
@@ -83,17 +83,27 @@ def sensor_api(request):
 @api_view(['GET'])
 def get_devices(request):
     devices = Device.objects.all().order_by('-last_seen')
-    res = [
-        {
+    res = []
+    for d in devices:
+        device_data = {
             "mac": d.mac_address,
             "name": d.name,
-            "cow_id": d.cow_id,
             "location": d.location,
             "total_steps": d.total_steps,
             "last_seen": d.last_seen
         }
-        for d in devices
-    ]
+        # Include animal information if assigned
+        if d.animal:
+            device_data["animal"] = {
+                "id": d.animal.id,
+                "ear_tag": d.animal.ear_tag,
+                "name": d.animal.name,
+                "gender": d.animal.gender,
+                "is_active": d.animal.is_active
+            }
+        else:
+            device_data["animal"] = None
+        res.append(device_data)
     return Response(res)
 
 
@@ -397,12 +407,21 @@ def cihazlar_heatmap(request):
             item = {
                 "mac": d.mac_address,
                 "name": d.name if d.name else f"İnek-{d.mac_address[:6].upper()}",
-                "cow_id": d.cow_id,
                 "kizginlik_skoru": aktivite.kizginlik_skoru if aktivite else 0,
                 "total_steps": d.total_steps,
                 "status": "online" if is_online else "offline",
                 "alarm": aktivite.kizginlik_alarm if aktivite else False
             }
+            # Include animal information if assigned
+            if d.animal:
+                item["animal"] = {
+                    "ear_tag": d.animal.ear_tag,
+                    "name": d.animal.name,
+                    "gender": d.animal.gender,
+                    "is_active": d.animal.is_active
+                }
+            else:
+                item["animal"] = None
             res_data.append(item)
 
         # Sıralama mantığı
@@ -551,3 +570,207 @@ def custom_logout(request):
         "status": "success",
         "message": "Başarıyla çıkış yapıldı"
     }, status=200)
+
+
+# ─────────────────────────────────────────────
+#  HAYVANLAR (Animals) API
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+def animal_list(request):
+    """
+    Tüm hayvanları listele.
+    Sadece giriş yapmış kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    animals = Animal.objects.all().order_by('-created_at')
+    data = []
+    for animal in animals:
+        data.append({
+            'id': animal.id,
+            'ear_tag': animal.ear_tag,
+            'name': animal.name,
+            'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+            'gender': animal.gender,
+            'is_active': animal.is_active,
+            'created_at': animal.created_at.isoformat(),
+            'device': animal.device.mac_address if hasattr(animal, 'device') else None,
+        })
+    return Response(data, status=200)
+
+
+@api_view(['POST'])
+def animal_create(request):
+    """
+    Yeni hayvan oluştur.
+    Sadece giriş yapmış kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    ear_tag = request.data.get('ear_tag')
+    if not ear_tag:
+        return Response({"error": "ear_tag alanı gerekli"}, status=400)
+    
+    # Check if ear_tag already exists
+    if Animal.objects.filter(ear_tag=ear_tag).exists():
+        return Response({"error": "Bu küpe numarası zaten kullanılıyor"}, status=400)
+    
+    animal = Animal.objects.create(
+        ear_tag=ear_tag,
+        name=request.data.get('name', ''),
+        birth_date=request.data.get('birth_date'),
+        gender=request.data.get('gender', 'Female'),
+        is_active=request.data.get('is_active', True)
+    )
+    
+    return Response({
+        'id': animal.id,
+        'ear_tag': animal.ear_tag,
+        'name': animal.name,
+        'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+        'gender': animal.gender,
+        'is_active': animal.is_active,
+        'created_at': animal.created_at.isoformat(),
+        'device': None,
+    }, status=201)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+def animal_detail(request, id):
+    """
+    Hayvan detayını getir, güncelle veya sil.
+    Sadece giriş yapmış kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    try:
+        animal = Animal.objects.get(id=id)
+    except Animal.DoesNotExist:
+        return Response({"error": "Hayvan bulunamadı"}, status=404)
+    
+    if request.method == 'GET':
+        return Response({
+            'id': animal.id,
+            'ear_tag': animal.ear_tag,
+            'name': animal.name,
+            'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+            'gender': animal.gender,
+            'is_active': animal.is_active,
+            'created_at': animal.created_at.isoformat(),
+            'device': animal.device.mac_address if hasattr(animal, 'device') else None,
+        }, status=200)
+    
+    elif request.method == 'PUT':
+        # Update fields
+        ear_tag = request.data.get('ear_tag')
+        if ear_tag and ear_tag != animal.ear_tag:
+            if Animal.objects.filter(ear_tag=ear_tag).exclude(id=animal.id).exists():
+                return Response({"error": "Bu küpe numarası zaten kullanılıyor"}, status=400)
+            animal.ear_tag = ear_tag
+        
+        if 'name' in request.data:
+            animal.name = request.data.get('name', '')
+        if 'birth_date' in request.data:
+            animal.birth_date = request.data.get('birth_date')
+        if 'gender' in request.data:
+            animal.gender = request.data.get('gender', 'Female')
+        if 'is_active' in request.data:
+            animal.is_active = request.data.get('is_active', True)
+        
+        animal.save()
+        
+        return Response({
+            'id': animal.id,
+            'ear_tag': animal.ear_tag,
+            'name': animal.name,
+            'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+            'gender': animal.gender,
+            'is_active': animal.is_active,
+            'created_at': animal.created_at.isoformat(),
+            'device': animal.device.mac_address if hasattr(animal, 'device') else None,
+        }, status=200)
+    
+    elif request.method == 'DELETE':
+        animal.delete()
+        return Response({"message": "Hayvan silindi"}, status=200)
+
+
+# ─────────────────────────────────────────────
+#  CİHAZ ATAMA (Device Assignment) API
+# ─────────────────────────────────────────────
+@api_view(['POST'])
+def assign_animal_to_device(request):
+    """
+    Bir hayvanı bir cihaza (tasma) ata.
+    Sadece giriş yapmış kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    mac_address = request.data.get('mac_address')
+    ear_tag = request.data.get('ear_tag')
+    
+    if not mac_address or not ear_tag:
+        return Response({"error": "mac_address ve ear_tag alanları gerekli"}, status=400)
+    
+    try:
+        device = Device.objects.get(mac_address=mac_address)
+    except Device.DoesNotExist:
+        return Response({"error": "Cihaz bulunamadı"}, status=404)
+    
+    try:
+        animal = Animal.objects.get(ear_tag=ear_tag)
+    except Animal.DoesNotExist:
+        return Response({"error": "Hayvan bulunamadı"}, status=404)
+    
+    # Check if animal is already assigned to another device
+    if hasattr(animal, 'device') and animal.device:
+        # Unassign from previous device
+        animal.device.animal = None
+        animal.device.save()
+    
+    # Assign animal to device
+    device.animal = animal
+    device.save()
+    
+    return Response({
+        "message": f"Hayvan {animal.ear_tag} cihaza {device.mac_address} atandı",
+        "device": {
+            "mac_address": device.mac_address,
+            "name": device.name,
+            "animal": animal.ear_tag
+        }
+    }, status=200)
+
+
+@api_view(['POST'])
+def unassign_animal_from_device(request):
+    """
+    Bir cihazdan hayvan atamasını kaldır.
+    Sadece giriş yapmış kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    mac_address = request.data.get('mac_address')
+    
+    if not mac_address:
+        return Response({"error": "mac_address alanı gerekli"}, status=400)
+    
+    try:
+        device = Device.objects.get(mac_address=mac_address)
+    except Device.DoesNotExist:
+        return Response({"error": "Cihaz bulunamadı"}, status=404)
+    
+    if device.animal:
+        animal_name = device.animal.ear_tag
+        device.animal = None
+        device.save()
+        return Response({
+            "message": f"Cihaz {device.mac_address} için hayvan ataması kaldırıldı (önceki hayvan: {animal_name})"
+        }, status=200)
+    else:
+        return Response({"message": "Bu cihazda atanmış hayvan yok"}, status=200)

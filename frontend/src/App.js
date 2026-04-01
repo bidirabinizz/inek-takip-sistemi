@@ -13,6 +13,7 @@ import DeviceReport from './pages/DeviceReport';
 import { AppProvider } from './context/AppContext';
 import LoginForm from './components/LoginForm';
 import Settings from './pages/Settings';
+import Animals from './pages/Animals';
 
 const ACTIVITY_META = {
   LYING: { label: "YATIYOR", icon: "🌙", color: "#818cf8", desc: "Uzun süreli hareketsizlik veya gece saati" },
@@ -463,6 +464,7 @@ function AppContent() {
               <Route path="/devices" element={<DevicesView />} />
               <Route path="/report/:mac" element={<DeviceReport />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/animals" element={<Animals />} />
             </Routes>
           ) : (
             <LoginForm />

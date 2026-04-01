@@ -195,9 +195,10 @@ const DeviceReport = () => {
           </div>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#fff" }}>
             📡 {deviceData?.name || mac}
-            {deviceData?.cow_id && (
+            {deviceData?.animal && (
               <span style={{ fontSize: 14, opacity: 0.8, marginLeft: 8 }}>
-                🐄 {deviceData.cow_id}
+                🐄 {deviceData.animal.ear_tag}
+                {deviceData.animal.name && ` (${deviceData.animal.name})`}
               </span>
             )}
           </h2>

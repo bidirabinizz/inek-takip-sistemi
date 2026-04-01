@@ -17,4 +17,11 @@ urlpatterns = [
     path('api/auth/logout/',       views.custom_logout),
     path('api/settings/',          views.get_settings),
     path('api/settings/update/',  views.update_settings),
+    # Animals CRUD
+    path('api/animals/',           views.animal_list, name='animal_list'),
+    path('api/animals/create/',   views.animal_create, name='animal_create'),
+    path('api/animals/<int:id>/',  views.animal_detail, name='animal_detail'),
+    # Device Assignment
+    path('api/devices/assign/',    views.assign_animal_to_device, name='assign_animal_to_device'),
+    path('api/devices/unassign/',  views.unassign_animal_from_device, name='unassign_animal_from_device'),
 ]

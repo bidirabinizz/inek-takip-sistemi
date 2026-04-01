@@ -2,6 +2,21 @@ from django.db import models
 from django.utils import timezone
 
 
+class Animal(models.Model):
+    ear_tag     = models.CharField(max_length=50, unique=True)
+    name        = models.CharField(max_length=100, blank=True, default="")
+    birth_date  = models.DateField(null=True, blank=True)
+    gender      = models.CharField(max_length=20, default='Female')
+    is_active   = models.BooleanField(default=True)
+    created_at  = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'Animal'
+
+    def __str__(self):
+        return f"{self.ear_tag} | {self.name}"
+
+
 class AccelerometerData(models.Model):
     device_mac      = models.CharField(max_length=50, default="BİLİNMEYEN_CİHAZ")
     x               = models.FloatField()
@@ -20,7 +35,7 @@ class AccelerometerData(models.Model):
 class Device(models.Model):
     mac_address = models.CharField(max_length=50, unique=True)
     name        = models.CharField(max_length=100, blank=True, default="")
-    cow_id      = models.CharField(max_length=20, blank=True, default="")
+    animal      = models.OneToOneField(Animal, on_delete=models.SET_NULL, null=True, blank=True, related_name='device')
     location    = models.CharField(max_length=50, blank=True, default="")
     total_steps = models.IntegerField(default=0)
     last_seen   = models.DateTimeField(auto_now=True)
@@ -29,7 +44,8 @@ class Device(models.Model):
         db_table = 'Device'
 
     def __str__(self):
-        return f"{self.name or self.mac_address} | {self.total_steps} adım"
+        animal_name = self.animal.name if self.animal else "No Animal"
+        return f"{self.name or self.mac_address} | {animal_name} | {self.total_steps} adım"
 
 
 class GunlukAktivite(models.Model):
@@ -43,7 +59,8 @@ class GunlukAktivite(models.Model):
     kizginlik_skoru = models.FloatField(default=0)
     kizginlik_alarm = models.BooleanField(default=False)
     yatma_suresi_dk = models.IntegerField(default=0)
-
+    last_activity = models.CharField(max_length=20, default="UNKNOWN")
+    last_activity_time = models.DateTimeField(null=True, blank=True)
     # ── Canlı yatma takibi için ──────────────────
     # Inek yatmaya başladığında bu alana zaman damgası yazılır.
     # Kalktığında süre hesaplanıp yatma_suresi_dk'ya eklenir,

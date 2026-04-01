@@ -17,6 +17,7 @@ const Navbar = () => {
   const tabs = [
     { id: 'dashboard', path: '/', label: '📊 Canlı Takip', icon: '📊' },
     { id: 'devices', path: '/devices', label: '📡 Cihazlar', icon: '📡' },
+    { id: 'animals', path: '/animals', label: '🐄 Hayvanlar', icon: '🐄' },
     { id: 'settings', path: '/settings', label: '⚙️ Ayarlar', icon: '⚙️' },
   ];
 
