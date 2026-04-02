@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API_BASE } from '../config';
 
 const AppContext = createContext();
@@ -31,24 +31,26 @@ export const AppProvider = ({ children }) => {
     MAG_VALLEY_THRESHOLD: 9.5,
     COOLDOWN_MS: 650,
     WINDOW_SIZE: 5,
+    ACTIVITY_BUFFER_SIZE: 40,
     FETCH_INTERVAL_MS: 700,
   });
   const [settingsLoading, setSettingsLoading] = useState(false);
 
   function getCookie(name) {
-  let cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim();
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
       }
     }
+    return cookieValue;
   }
-  return cookieValue;
-}
+
   // Theme sync localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -56,25 +58,25 @@ export const AppProvider = ({ children }) => {
     document.documentElement.className = savedTheme;
   }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
     localStorage.setItem('theme', newTheme);
     document.documentElement.className = newTheme;
-  };
+  }, [theme]);
 
-  const addNotification = (message, type = 'info') => {
+  const addNotification = useCallback((message, type = 'info') => {
     const id = Date.now();
     const notif = { id, message, type, timestamp: new Date().toLocaleTimeString() };
     setNotifications(prev => [notif, ...prev.slice(0, 4)]);
     setTimeout(() => removeNotification(id), 10000);
-  };
+  }, []);
 
-  const removeNotification = (id) => {
+  const removeNotification = useCallback((id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  }, []);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     setSettingsLoading(true);
     try {
       const response = await fetch(`${API_BASE}/api/settings/`, {
@@ -83,22 +85,26 @@ export const AppProvider = ({ children }) => {
       if (response.ok) {
         const data = await response.json();
         setSettings(data);
+      } else if (response.status === 401 || response.status === 403) {
+        // Unauthorized - clear state and potentially redirect
+        console.error('Ayarlar yüklenemedi: Oturum süreniz doldu, lütfen tekrar giriş yapın.');
+        // Could also trigger logout via AuthContext if needed
       }
     } catch (error) {
       console.error('Settings fetch error:', error);
     } finally {
       setSettingsLoading(false);
     }
-  };
+  }, []);
 
-  const updateSettings = async (newSettings) => {
+  const updateSettings = useCallback(async (newSettings) => {
     setSettingsLoading(true);
     try {
       const response = await fetch(`${API_BASE}/api/settings/update/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken') // <-- BURAYA ALDIK
+          'X-CSRFToken': getCookie('csrftoken')
         },
         credentials: 'include',
         body: JSON.stringify(newSettings),
@@ -108,15 +114,15 @@ export const AppProvider = ({ children }) => {
         setSettings(data.settings || newSettings);
         return { success: true };
       } else {
-        const error = await response.json();
-        return { success: false, error: error.error || 'Güncelleme başarısız' };
+        const errorData = await response.json().catch(() => ({}));
+        return { success: false, error: errorData.error || 'Güncelleme başarısız' };
       }
     } catch (error) {
       return { success: false, error: 'Bağlantı hatası' };
     } finally {
       setSettingsLoading(false);
     }
-  };
+  }, []);
 
   return (
     <AppContext.Provider value={{

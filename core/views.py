@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .models import AccelerometerData, Device, GunlukAktivite, SystemSettings, Animal, UserProfile
 from django.contrib.auth.models import User
+from django.db.models import Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware, is_naive, localtime
@@ -782,6 +783,7 @@ def animal_list(request):
             'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
             'gender': animal.gender,
             'is_active': animal.is_active,
+            'paddock': animal.paddock,
             'created_at': animal.created_at.isoformat(),
             'device': animal.device.mac_address if hasattr(animal, 'device') else None,
         })
@@ -813,7 +815,8 @@ def animal_create(request):
         name=request.data.get('name', ''),
         birth_date=request.data.get('birth_date'),
         gender=request.data.get('gender', 'Female'),
-        is_active=request.data.get('is_active', True)
+        is_active=request.data.get('is_active', True),
+        paddock=request.data.get('paddock', None)
     )
     
     return Response({
@@ -823,6 +826,7 @@ def animal_create(request):
         'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
         'gender': animal.gender,
         'is_active': animal.is_active,
+        'paddock': animal.paddock,
         'created_at': animal.created_at.isoformat(),
         'device': None,
     }, status=201)
@@ -851,6 +855,7 @@ def animal_detail(request, id):
             'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
             'gender': animal.gender,
             'is_active': animal.is_active,
+            'paddock': animal.paddock,
             'created_at': animal.created_at.isoformat(),
             'device': animal.device.mac_address if hasattr(animal, 'device') else None,
         }, status=200)
@@ -876,6 +881,8 @@ def animal_detail(request, id):
                 animal.gender = request.data.get('gender', 'Female')
             if 'is_active' in request.data:
                 animal.is_active = request.data.get('is_active', True)
+            if 'paddock' in request.data:
+                animal.paddock = request.data.get('paddock')
             
             animal.save()
             
@@ -886,6 +893,7 @@ def animal_detail(request, id):
                 'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
                 'gender': animal.gender,
                 'is_active': animal.is_active,
+                'paddock': animal.paddock,
                 'created_at': animal.created_at.isoformat(),
                 'device': animal.device.mac_address if hasattr(animal, 'device') else None,
             }, status=200)
@@ -974,32 +982,32 @@ def unassign_animal_from_device(request):
 
 @api_view(['GET'])
 def dashboard_summary(request):
-"""
-Dashboard için özet verileri döner:
-- total_active_animals: Aktif hayvan sayısı
-- excited_animals: Kızgın (excited_count > 0) aktif hayvan sayısı
-- total_steps: Tüm cihazların toplam adımı
-"""
-# Aktif hayvanları say
-total_active_animals = Animal.objects.filter(is_active=True).count()
+    """
+    Dashboard için özet verileri döner:
+    - total_active_animals: Aktif hayvan sayısı
+    - excited_animals: Kızgın (excited_count > 0) aktif hayvan sayısı
+    - total_steps: Tüm cihazların toplam adımı
+    """
+    # Aktif hayvanları say
+    total_active_animals = Animal.objects.filter(is_active=True).count()
 
-# excited_count > 0 olan aktif hayvanları say (GunlukAktivite'den bugünkü)
-bugun = date.today()
-excited_activities = GunlukAktivite.objects.filter(
-    tarih=bugun,
-    excited_count__gt=0
-).values_list('mac', flat=True)
+    # excited_count > 0 olan aktif hayvanları say (GunlukAktivite'den bugünkü)
+    bugun = date.today()
+    excited_activities = GunlukAktivite.objects.filter(
+        tarih=bugun,
+        excited_count__gt=0
+    ).values_list('mac', flat=True)
 
-# Bu mac adreslerine sahip hayvanları say (cihazlar üzerinden)
-excited_devices = Device.objects.filter(mac_address__in=excited_activities)
-excited_animals = excited_devices.filter(animal__is_active=True).count()
+    # Bu mac adreslerine sahip hayvanları say (cihazlar üzerinden)
+    excited_devices = Device.objects.filter(mac_address__in=excited_activities)
+    excited_animals = excited_devices.filter(animal__is_active=True).count()
 
-# Tüm cihazların toplam adımını hesapla
-total_steps_result = Device.objects.aggregate(total=Sum('total_steps'))
-total_steps = total_steps_result['total'] or 0
+    # Tüm cihazların toplam adımını hesapla
+    total_steps_result = Device.objects.aggregate(total=Sum('total_steps'))
+    total_steps = total_steps_result['total'] or 0
 
-return Response({
-    "total_active_animals": total_active_animals,
-    "excited_animals": excited_animals,
-    "total_steps": total_steps
-}, status=200)
+    return Response({
+        "total_active_animals": total_active_animals,
+        "excited_animals": excited_animals,
+        "total_steps": total_steps
+    }, status=200)

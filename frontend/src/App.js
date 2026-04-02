@@ -257,6 +257,30 @@ function Dashboard() {
       const smoothed   = movingAverage(rawMags, settings.WINDOW_SIZE);
       const timestamps = sorted.map(d => new Date(d.time).getTime());
 
+      // 🚀 İLK YÜKLEME KORUMA MANTIĞI
+      if (lastFetchedTimeRef.current === null) {
+        // Sadece recentMagsRef'i doldur ve son zamanı kaydet
+        recentMagsRef.current = [...recentMagsRef.current, ...rawMags].slice(-settings.ACTIVITY_BUFFER_SIZE);
+        lastFetchedTimeRef.current = sorted[sorted.length - 1].time;
+        // Sadece grafiği çizdir, detectSteps ve POST işlemlerini atla
+        setChartData(prev => {
+          const pts = sorted.map((d, i) => {
+            const dateObj = new Date(d.time);
+            return {
+              timeLabel: dateObj.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+              rawMag: parseFloat(rawMags[i].toFixed(3)),
+              smoothMag: parseFloat(smoothed[i].toFixed(3)),
+              z: parseFloat(d.z.toFixed(3)),
+              x: parseFloat(d.x.toFixed(3)),
+              y: parseFloat(d.y.toFixed(3)),
+            };
+          });
+          return [...prev, ...pts].slice(-300);
+        });
+        return; // detectSteps ve backend POST'lerden kaçın
+      }
+      // 🚀 PERİYODİK YENİ VERİLER İÇİN NORMAL AKIŞ
+
       const newSteps = detectSteps(smoothed, timestamps, peakStateRef, lastStepTimeRef, settings);
       const now = Date.now();
       
@@ -274,7 +298,7 @@ function Dashboard() {
       recentStepTimesRef.current = recentStepTimesRef.current.filter(t => now - t < 8000);
       lastFetchedTimeRef.current = sorted[sorted.length - 1].time;
 
-      recentMagsRef.current = [...recentMagsRef.current, ...rawMags].slice(-settings.WINDOW);
+      recentMagsRef.current = [...recentMagsRef.current, ...rawMags].slice(-settings.ACTIVITY_BUFFER_SIZE);
       const recentPeakCount = recentStepTimesRef.current.length;
       const rawActivity = classifyActivityRaw(recentMagsRef.current, recentPeakCount, settings);
 
@@ -549,6 +573,7 @@ function Dashboard() {
               <Line type="monotone" dataKey="rawMag" stroke="rgba(100,120,140,0.45)" strokeWidth={1} dot={false} isAnimationActive={false} name="Ham Mag" />
               <Line type="monotone" dataKey="smoothMag" stroke="#00ffb4" strokeWidth={2.5} dot={false} isAnimationActive={false} name="Filtrelenmiş" />
               <Line type="monotone" dataKey="z" stroke="#7dd3fc" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Z" />
+              <Line type="monotone" dataKey="l" dot={false} isAnimationActive={true} name="l" />
               <Brush dataKey="timeLabel" height={25} stroke="#4a6070" fill="rgba(0,255,180,0.05)" travellerWidth={10} />
             </LineChart>
           </ResponsiveContainer>
@@ -573,8 +598,8 @@ function AppContent() {
   return (
     <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-mono`}>
       <div className="app-container">
-        <Navbar />
-        <main className="pt-2">
+  {isAuthenticated && <Navbar />}
+  <main className="pt-2">
           {isAuthenticated ? (
             <Routes>
               <Route path="/" element={<Dashboard />} />

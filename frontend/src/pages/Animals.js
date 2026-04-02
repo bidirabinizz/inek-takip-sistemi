@@ -30,9 +30,12 @@ const Animals = () => {
     birth_date: '',
     gender: 'Female',
     is_active: true,
+    paddock: '',
   });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentAnimalId, setCurrentAnimalId] = useState(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -64,7 +67,7 @@ const Animals = () => {
     e.preventDefault();
     
     // 🚀 KORUMA 1: Çift tıklamayı engelle (Zaten istek atılıyorsa ikincisini durdur)
-    if (submitting) return; 
+    if (submitting) return;
     
     setSubmitting(true);
     setMessage({ type: '', text: '' });
@@ -72,34 +75,70 @@ const Animals = () => {
     // 🚀 KORUMA 2: Boş tarihi "" yerine null yap ki Django'nun veritabanı çökmesin
     const payload = {
       ...formData,
-      birth_date: formData.birth_date === '' ? null : formData.birth_date
+      birth_date: formData.birth_date === '' ? null : formData.birth_date,
+      // paddock'u boşsa null yap
+      paddock: formData.paddock === '' ? null : formData.paddock
     };
 
     try {
-      const response = await fetch(`${API_BASE}/api/animals/create/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken') // Şifremiz yerinde duruyor
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload), // formData yerine temizlenmiş payload'u gönderiyoruz
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Hayvan başarıyla eklendi' });
-        setFormData({
-          ear_tag: '',
-          name: '',
-          birth_date: '',
-          gender: 'Female',
-          is_active: true,
+      if (isEditing && currentAnimalId) {
+        // Güncelleme (PUT)
+        const response = await fetch(`${API_BASE}/api/animals/${currentAnimalId}/`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          credentials: 'include',
+          body: JSON.stringify(payload),
         });
-        setShowModal(false);
-        fetchAnimals();
+
+        const data = await response.json();
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Hayvan başarıyla güncellendi' });
+          setFormData({
+            ear_tag: '',
+            name: '',
+            birth_date: '',
+            gender: 'Female',
+            is_active: true,
+            paddock: '',
+          });
+          setIsEditing(false);
+          setCurrentAnimalId(null);
+          setShowModal(false);
+          fetchAnimals();
+        } else {
+          setMessage({ type: 'error', text: data.error || 'Güncelleme başarısız' });
+        }
       } else {
-        setMessage({ type: 'error', text: data.error || 'Ekleme başarısız' });
+        // Yeni ekleme (POST)
+        const response = await fetch(`${API_BASE}/api/animals/create/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          setMessage({ type: 'success', text: 'Hayvan başarıyla eklendi' });
+          setFormData({
+            ear_tag: '',
+            name: '',
+            birth_date: '',
+            gender: 'Female',
+            is_active: true,
+            paddock: '',
+          });
+          setShowModal(false);
+          fetchAnimals();
+        } else {
+          setMessage({ type: 'error', text: data.error || 'Ekleme başarısız' });
+        }
       }
     } catch (error) {
       console.error("Hata detayı:", error);
@@ -116,7 +155,7 @@ const Animals = () => {
       const response = await fetch(`${API_BASE}/api/animals/${id}/`, {
         method: 'DELETE',
         headers: {
-          'X-CSRFToken': getCookie('csrftoken') // <--- BURAYI EKLEDİK
+          'X-CSRFToken': getCookie('csrftoken')
         },
         credentials: 'include'
       });
@@ -129,6 +168,20 @@ const Animals = () => {
     } catch (error) {
       setMessage({ type: 'error', text: 'Bağlantı hatası' });
     }
+  };
+
+  const handleEdit = (animal) => {
+    setFormData({
+      ear_tag: animal.ear_tag,
+      name: animal.name || '',
+      birth_date: animal.birth_date || '',
+      gender: animal.gender,
+      is_active: animal.is_active,
+      paddock: animal.paddock || '',
+    });
+    setCurrentAnimalId(animal.id);
+    setIsEditing(true);
+    setShowModal(true);
   };
 
   const handleToggleActive = async (id, is_active) => {
@@ -191,6 +244,7 @@ const Animals = () => {
                   <th className="py-4 px-4 text-gray-300 font-semibold">İsim</th>
                   <th className="py-4 px-4 text-gray-300 font-semibold">Doğum Tarihi</th>
                   <th className="py-4 px-4 text-gray-300 font-semibold">Cinsiyet</th>
+                  <th className="py-4 px-4 text-gray-300 font-semibold">Padok</th>
                   <th className="py-4 px-4 text-gray-300 font-semibold">Durum</th>
                   <th className="py-4 px-4 text-gray-300 font-semibold">Atanmış Cihaz</th>
                   <th className="py-4 px-4 text-gray-300 font-semibold">İşlemler</th>
@@ -210,6 +264,7 @@ const Animals = () => {
                       <td className="py-4 px-4 text-gray-300">{animal.name || '-'}</td>
                       <td className="py-4 px-4 text-gray-300">{animal.birth_date || '-'}</td>
                       <td className="py-4 px-4 text-gray-300">{animal.gender}</td>
+                      <td className="py-4 px-4 text-gray-300">{animal.paddock || '-'}</td>
                       <td className="py-4 px-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${animal.is_active ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
                           {animal.is_active ? 'Aktif' : 'Pasif'}
@@ -219,6 +274,12 @@ const Animals = () => {
                       <td className="py-4 px-4">
                         {userRole !== 'WORKER' ? (
                           <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEdit(animal)}
+                              className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded transition-colors"
+                            >
+                              Düzenle
+                            </button>
                             <button
                               onClick={() => handleToggleActive(animal.id, animal.is_active)}
                               className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
@@ -260,9 +321,13 @@ const Animals = () => {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md border border-gray-700">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Yeni Hayvan Ekle</h2>
+              <h2 className="text-2xl font-bold text-white">{isEditing ? 'Hayvan Düzenle' : 'Yeni Hayvan Ekle'}</h2>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  setIsEditing(false);
+                  setCurrentAnimalId(null);
+                }}
                 className="text-gray-400 hover:text-white text-2xl"
               >
                 ×
@@ -325,6 +390,20 @@ const Animals = () => {
                 </select>
               </div>
 
+              <div className="mb-4">
+                <label htmlFor="paddock" className="block text-sm font-medium text-gray-300 mb-2">
+                  Padok
+                </label>
+                <input
+                  type="text"
+                  id="paddock"
+                  value={formData.paddock}
+                  onChange={(e) => setFormData({ ...formData, paddock: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Örn: Padok A"
+                />
+              </div>
+
               <div className="mb-6">
                 <label className="flex items-center">
                   <input
@@ -343,7 +422,7 @@ const Animals = () => {
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={submitting}
                 >
-                  {submitting ? 'Ekleniyor...' : 'Ekle'}
+                  {submitting ? (isEditing ? 'Güncelleniyor...' : 'Ekleniyor...') : (isEditing ? 'Güncelle' : 'Ekle')}
                 </button>
                 <button
                   type="button"

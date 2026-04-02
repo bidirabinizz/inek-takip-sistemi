@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { API_BASE } from '../config';
 
@@ -6,6 +6,35 @@ import { API_BASE } from '../config';
 axios.defaults.withCredentials = true;
 axios.defaults.xsrfCookieName = 'csrftoken';
 axios.defaults.xsrfHeaderName = 'X-CSRFToken';
+
+// Global 401 interceptor - clear storage on 401, but DO NOT redirect
+axios.interceptors.response.use(
+    response => response,
+    async error => {
+        const originalRequest = error.config;
+        
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            originalRequest._retry = true;
+            
+            // Clear auth state from storage
+            localStorage.removeItem('userRole');
+            
+            // Try to logout on server to clear session
+            try {
+                await axios.post(`${API_BASE}/api/auth/logout/`);
+            } catch (e) {
+                // Ignore logout errors
+            }
+            
+            // Do NOT use window.location or window.location.reload()
+            // The AuthProvider will handle state changes via checkAuthStatus or component-level error handling
+            // Simply reject the error - the component that made the request can handle it
+            return Promise.reject(error);
+        }
+        
+        return Promise.reject(error);
+    }
+);
 
 const AuthContext = createContext({});
 
@@ -21,34 +50,36 @@ export const AuthProvider = ({ children }) => {
     const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
     const [loading, setLoading] = useState(true);
 
-    // Uygulama başladığında oturum durumunu kontrol et
-    useEffect(() => {
-        checkAuthStatus();
-    }, []);
-
-    const checkAuthStatus = async () => {
+    const checkAuthStatus = useCallback(async () => {
         try {
-            // Basit bir kontrol: backend'den kullanıcı bilgisi iste
-            // Not: Django session tabanlı authentication kullanıyorsak,
-            // bu endpoint'i backend'de eklemek gerekebilir
-            const response = await axios.get(`${API_BASE}/api/aktivite-durum/`, {
-                params: { mac: 'test' } // test MAC, sadece authentication kontrolü için
-            });
-            // Eğer istek başarılıysa, kullanıcı giriş yapmış kabul edilir
-            // Bu mantığı backend'e göre düzenleyebilirsiniz
-            setIsAuthenticated(true);
+            // Use a simple endpoint that just checks session authentication
+            const response = await axios.get(`${API_BASE}/api/settings/`);
+            if (response.status === 200) {
+                setIsAuthenticated(true);
+                // User role will be set on login via localStorage
+            }
         } catch (error) {
-            // 401 veya 403 hatası alınırsa giriş yapılmamış kabul et
             if (error.response && (error.response.status === 401 || error.response.status === 403)) {
                 setIsAuthenticated(false);
+                setUser(null);
+                setUserRole(null);
+                localStorage.removeItem('userRole');
             } else {
-                // Diğer hatalar (network, server error) için giriş yapılmamış varsay
+                // Network or other errors - assume not authenticated to be safe
                 setIsAuthenticated(false);
+                setUser(null);
+                setUserRole(null);
+                localStorage.removeItem('userRole');
             }
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    // Uygulama başladığında oturum durumunu kontrol et
+    useEffect(() => {
+        checkAuthStatus();
+    }, [checkAuthStatus]);
 
     const login = async (username, password) => {
         try {

@@ -38,6 +38,7 @@ class Animal(models.Model):
     birth_date  = models.DateField(null=True, blank=True)
     gender      = models.CharField(max_length=20, default='Female')
     is_active   = models.BooleanField(default=True)
+    paddock     = models.CharField(max_length=50, blank=True, null=True)  # Yeni alan: Padok
     created_at  = models.DateTimeField(default=timezone.now)
 
     class Meta:

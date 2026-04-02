@@ -56,5 +56,7 @@ pip install -r requirements.txt
 python manage.py makemigrations
 python manage.py migrate
 
-# Sunucuyu başlatın
+
+waitress-serve --listen=0.0.0.0:8000 backend.wsgi:application
+
 waitress-serve --listen=0.0.0.0:8000 backend.wsgi:application
