@@ -18,6 +18,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [user, setUser] = useState(null);
+    const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
     const [loading, setLoading] = useState(true);
 
     // Uygulama başladığında oturum durumunu kontrol et
@@ -52,7 +53,6 @@ export const AuthProvider = ({ children }) => {
     const login = async (username, password) => {
         try {
             const response = await axios.post(`${API_BASE}/api/auth/login/`, {
-
                 username,
                 password
             });
@@ -60,18 +60,21 @@ export const AuthProvider = ({ children }) => {
             if (response.data.status === 'success') {
                 setIsAuthenticated(true);
                 setUser(response.data.user);
+                const role = response.data.user.role;
+                setUserRole(role);
+                localStorage.setItem('userRole', role);
                 return { success: true, message: response.data.message };
             }
         } catch (error) {
             if (error.response && error.response.data) {
-                return { 
-                    success: false, 
-                    message: error.response.data.error || 'Giriş başarısız' 
+                return {
+                    success: false,
+                    message: error.response.data.error || 'Giriş başarısız'
                 };
             }
-            return { 
-                success: false, 
-                message: 'Bağlantı hatası, lütfen tekrar deneyin' 
+            return {
+                success: false,
+                message: 'Bağlantı hatası, lütfen tekrar deneyin'
             };
         }
     };
@@ -84,12 +87,15 @@ export const AuthProvider = ({ children }) => {
         } finally {
             setIsAuthenticated(false);
             setUser(null);
+            setUserRole(null);
+            localStorage.removeItem('userRole');
         }
     };
 
     const value = {
         isAuthenticated,
         user,
+        userRole,
         loading,
         login,
         logout

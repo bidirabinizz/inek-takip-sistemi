@@ -7,19 +7,29 @@ import { useAuth } from '../context/AuthContext';
 // DİKKAT: activeTab ve setActiveTab kısımlarını sildik, artık onlara gerek yok!
 const Navbar = () => {
   const { theme, toggleTheme, notifications, addNotification, searchQuery, setSearchQuery } = useAppContext();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, userRole } = useAuth();
   const navigate = useNavigate(); 
   const location = useLocation();
   
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // 🚀 URL yönlendirmeleri için "path" özelliğini ekledik
-  const tabs = [
+  const baseTabs = [
     { id: 'dashboard', path: '/', label: '📊 Canlı Takip', icon: '📊' },
     { id: 'devices', path: '/devices', label: '📡 Cihazlar', icon: '📡' },
     { id: 'animals', path: '/animals', label: '🐄 Hayvanlar', icon: '🐄' },
-    { id: 'settings', path: '/settings', label: '⚙️ Ayarlar', icon: '⚙️' },
   ];
+  
+  // ADMIN kullanıcılara özel tablar
+  const adminTabs = [
+    { id: 'settings', path: '/settings', label: '⚙️ Ayarlar', icon: '⚙️' },
+    { id: 'users', path: '/users', label: '👥 Kullanıcılar', icon: '👥' },
+  ];
+  
+  // Kullanıcı rolüne göre tabları filtrele
+  const tabs = userRole === 'ADMIN'
+    ? [...baseTabs, ...adminTabs]
+    : baseTabs.filter(tab => tab.id !== 'settings');
 
   const toggleMobileMenu = () => setMobileOpen(!mobileOpen);
 

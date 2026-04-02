@@ -24,4 +24,10 @@ urlpatterns = [
     # Device Assignment
     path('api/devices/assign/',    views.assign_animal_to_device, name='assign_animal_to_device'),
     path('api/devices/unassign/',  views.unassign_animal_from_device, name='unassign_animal_from_device'),
-]
+    # User Management (Admin only)
+       path('api/users/',             views.user_list, name='user_list'),
+       path('api/users/create/',      views.user_create, name='user_create'),
+       path('api/users/<int:id>/',    views.user_detail, name='user_detail'),
+       path('api/users/<int:id>/role/', views.user_update_role, name='user_update_role'),
+       path('api/dashboard-summary/', views.dashboard_summary, name='dashboard_summary'),
+   ]

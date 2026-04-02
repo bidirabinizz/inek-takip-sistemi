@@ -1,6 +1,7 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import AccelerometerData, Device, GunlukAktivite, SystemSettings, Animal
+from .models import AccelerometerData, Device, GunlukAktivite, SystemSettings, Animal, UserProfile
+from django.contrib.auth.models import User
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware, is_naive, localtime
@@ -471,10 +472,15 @@ def cihaz_status(request, mac):
 def get_settings(request):
     """
     Sistem ayarlarını döner (Singleton).
-    Sadece giriş yapmış kullanıcılar erişebilir.
+    Dashboard'un çalışması için tüm giriş yapmış kullanıcılar (ADMIN, VET, WORKER) görebilir.
     """
     if not request.user.is_authenticated:
         return Response({"error": "Authentication required"}, status=401)
+    
+    # 🚀 EĞER BURADA "if request.user.profile.role != 'ADMIN':" GİBİ BİR KONTROL VARSA SİL!
+    
+    from django.middleware.csrf import get_token
+    get_token(request) # Dün eklediğimiz garanti CSRF şifresi
     
     settings = SystemSettings.get_instance()
     return Response(settings.to_dict(), status=200)
@@ -484,10 +490,13 @@ def get_settings(request):
 def update_settings(request):
     """
     Sistem ayarlarını günceller (Singleton).
-    Sadece giriş yapmış kullanıcılar erişebilir.
+    Sadece ADMIN kullanıcılar erişebilir.
     """
     if not request.user.is_authenticated:
         return Response({"error": "Authentication required"}, status=401)
+    
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'ADMIN':
+        return Response({"error": "Forbidden - Admin access required"}, status=403)
     
     settings = SystemSettings.get_instance()
     
@@ -545,6 +554,8 @@ def custom_login(request):
     user = authenticate(request, username=username, password=password)
     if user is not None:
         login(request, user)
+        # Get user role from profile
+        role = user.profile.role if hasattr(user, 'profile') else 'WORKER'
         return Response({
             "status": "success",
             "message": f"Hoş geldiniz, {user.username}",
@@ -552,6 +563,7 @@ def custom_login(request):
                 "id": user.id,
                 "username": user.username,
                 "email": user.email,
+                "role": role
             }
         }, status=200)
     else:
@@ -570,6 +582,182 @@ def custom_logout(request):
         "status": "success",
         "message": "Başarıyla çıkış yapıldı"
     }, status=200)
+
+
+# ─────────────────────────────────────────────
+#  KULLANICI YÖNETİMİ (User Management) - SADECE ADMIN
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+def user_list(request):
+    """
+    Tüm kullanıcıları listele. Sadece ADMIN erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'ADMIN':
+        return Response({"error": "Forbidden - Admin access required"}, status=403)
+    
+    users = User.objects.all().order_by('-date_joined')
+    data = []
+    for user in users:
+        role = user.profile.role if hasattr(user, 'profile') else 'WORKER'
+        data.append({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': role,
+            'is_active': user.is_active,
+            'date_joined': user.date_joined.isoformat(),
+        })
+    return Response(data, status=200)
+
+
+api_view(['POST'])
+def user_create(request):
+    """
+    Yeni kullanıcı oluşturur.
+    Sadece ADMIN rolündeki kullanıcılar erişebilir.
+    """
+    if not request.user.is_authenticated or not hasattr(request.user, 'userprofile') and not hasattr(request.user, 'profile'):
+        return Response({"error": "Yetkiniz yok"}, status=403)
+        
+    # Rol kontrolünü güvenli yapalım (related_name 'profile' veya 'userprofile' olabilir)
+    user_role = getattr(request.user, 'profile', getattr(request.user, 'userprofile', None))
+    if not user_role or user_role.role != 'ADMIN':
+        return Response({"error": "Sadece Adminler kullanıcı ekleyebilir."}, status=403)
+
+    username = request.data.get('username')
+    password = request.data.get('password')
+    email = request.data.get('email', '')
+    role = request.data.get('role', 'WORKER')
+
+    if not username or not password:
+        return Response({"error": "Kullanıcı adı ve şifre gereklidir."}, status=400)
+
+    if User.objects.filter(username=username).exists():
+        return Response({"error": "Bu kullanıcı adı zaten kullanılıyor."}, status=400)
+
+    try:
+        # 1. Kullanıcıyı güvenle yarat (Bizim sinyal burada profili otomatik açacak)
+        user = User.objects.create_user(username=username, email=email, password=password)
+        
+        # 2. Çarpışmayı önlemek için get_or_create kullanıp sadece Rolü güncelliyoruz
+        profile, created = UserProfile.objects.get_or_create(user=user)
+        profile.role = role
+        profile.save()
+
+        # 3. Tarih çökmesini engellemek için str() ile dönüyoruz
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': profile.role,
+            'date_joined': str(user.date_joined)
+        }, status=201)
+
+    except Exception as e:
+        print(f"Kullanıcı Yaratma Hatası: {e}")
+        return Response({"error": "Sunucu hatası: Kullanıcı oluşturulamadı."}, status=500)
+
+
+
+
+@api_view(['DELETE'])
+def user_delete(request, id):
+    """
+    Kullanıcı sil. Sadece ADMIN erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'ADMIN':
+        return Response({"error": "Forbidden - Admin access required"}, status=403)
+    
+    try:
+        user = User.objects.get(id=id)
+    except User.DoesNotExist:
+        return Response({"error": "Kullanıcı bulunamadı"}, status=404)
+    
+    # Prevent self-deletion
+    if user.id == request.user.id:
+        return Response({"error": "Kendi hesabınızı silemezsiniz"}, status=400)
+    
+    user.delete()
+    return Response({"message": "Kullanıcı silindi"}, status=200)
+
+
+@api_view(['PUT'])
+def user_update_role(request, id):
+    """
+    Kullanıcı rolünü güncelle. Sadece ADMIN erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'ADMIN':
+        return Response({"error": "Forbidden - Admin access required"}, status=403)
+    
+    try:
+        user = User.objects.get(id=id)
+    except User.DoesNotExist:
+        return Response({"error": "Kullanıcı bulunamadı"}, status=404)
+    
+    role = request.data.get('role')
+    if not role or role not in ['ADMIN', 'VET', 'WORKER']:
+        return Response({"error": "Geçersiz rol. Seçenekler: ADMIN, VET, WORKER"}, status=400)
+    
+    # Update profile
+    if hasattr(user, 'profile'):
+        user.profile.role = role
+        user.profile.save()
+    else:
+        UserProfile.objects.create(user=user, role=role)
+    
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'role': role,
+        'is_active': user.is_active,
+    }, status=200)
+
+
+@api_view(['GET', 'DELETE'])
+def user_detail(request, id):
+    """
+    Kullanıcı detayını getir veya sil.
+    Sadece ADMIN erişebilir.
+    """
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+    
+    if not hasattr(request.user, 'profile') or request.user.profile.role != 'ADMIN':
+        return Response({"error": "Forbidden - Admin access required"}, status=403)
+    
+    try:
+        user = User.objects.get(id=id)
+    except User.DoesNotExist:
+        return Response({"error": "Kullanıcı bulunamadı"}, status=404)
+    
+    if request.method == 'GET':
+        role = user.profile.role if hasattr(user, 'profile') else 'WORKER'
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': role,
+            'is_active': user.is_active,
+            'date_joined': user.date_joined.isoformat(),
+        }, status=200)
+    
+    elif request.method == 'DELETE':
+        # Prevent self-deletion
+        if user.id == request.user.id:
+            return Response({"error": "Kendi hesabınızı silemezsiniz"}, status=400)
+        
+        user.delete()
+        return Response({"message": "Kullanıcı silindi"}, status=200)
 
 
 # ─────────────────────────────────────────────
@@ -604,10 +792,13 @@ def animal_list(request):
 def animal_create(request):
     """
     Yeni hayvan oluştur.
-    Sadece giriş yapmış kullanıcılar erişebilir.
+    Sadece ADMIN ve VET kullanıcılar erişebilir.
     """
     if not request.user.is_authenticated:
         return Response({"error": "Authentication required"}, status=401)
+    
+    if not hasattr(request.user, 'profile') or request.user.profile.role not in ['ADMIN', 'VET']:
+        return Response({"error": "Forbidden - Admin or Vet access required"}, status=403)
     
     ear_tag = request.data.get('ear_tag')
     if not ear_tag:
@@ -641,7 +832,8 @@ def animal_create(request):
 def animal_detail(request, id):
     """
     Hayvan detayını getir, güncelle veya sil.
-    Sadece giriş yapmış kullanıcılar erişebilir.
+    GET: Tüm giriş yapmış kullanıcılar
+    PUT/DELETE: Sadece ADMIN ve VET
     """
     if not request.user.is_authenticated:
         return Response({"error": "Authentication required"}, status=401)
@@ -663,39 +855,44 @@ def animal_detail(request, id):
             'device': animal.device.mac_address if hasattr(animal, 'device') else None,
         }, status=200)
     
-    elif request.method == 'PUT':
-        # Update fields
-        ear_tag = request.data.get('ear_tag')
-        if ear_tag and ear_tag != animal.ear_tag:
-            if Animal.objects.filter(ear_tag=ear_tag).exclude(id=animal.id).exists():
-                return Response({"error": "Bu küpe numarası zaten kullanılıyor"}, status=400)
-            animal.ear_tag = ear_tag
+    elif request.method in ['PUT', 'DELETE']:
+        # Only ADMIN and VET can update or delete
+        if not hasattr(request.user, 'profile') or request.user.profile.role not in ['ADMIN', 'VET']:
+            return Response({"error": "Forbidden - Admin or Vet access required"}, status=403)
         
-        if 'name' in request.data:
-            animal.name = request.data.get('name', '')
-        if 'birth_date' in request.data:
-            animal.birth_date = request.data.get('birth_date')
-        if 'gender' in request.data:
-            animal.gender = request.data.get('gender', 'Female')
-        if 'is_active' in request.data:
-            animal.is_active = request.data.get('is_active', True)
+        if request.method == 'PUT':
+            # Update fields
+            ear_tag = request.data.get('ear_tag')
+            if ear_tag and ear_tag != animal.ear_tag:
+                if Animal.objects.filter(ear_tag=ear_tag).exclude(id=animal.id).exists():
+                    return Response({"error": "Bu küpe numarası zaten kullanılıyor"}, status=400)
+                animal.ear_tag = ear_tag
+            
+            if 'name' in request.data:
+                animal.name = request.data.get('name', '')
+            if 'birth_date' in request.data:
+                animal.birth_date = request.data.get('birth_date')
+            if 'gender' in request.data:
+                animal.gender = request.data.get('gender', 'Female')
+            if 'is_active' in request.data:
+                animal.is_active = request.data.get('is_active', True)
+            
+            animal.save()
+            
+            return Response({
+                'id': animal.id,
+                'ear_tag': animal.ear_tag,
+                'name': animal.name,
+                'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+                'gender': animal.gender,
+                'is_active': animal.is_active,
+                'created_at': animal.created_at.isoformat(),
+                'device': animal.device.mac_address if hasattr(animal, 'device') else None,
+            }, status=200)
         
-        animal.save()
-        
-        return Response({
-            'id': animal.id,
-            'ear_tag': animal.ear_tag,
-            'name': animal.name,
-            'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
-            'gender': animal.gender,
-            'is_active': animal.is_active,
-            'created_at': animal.created_at.isoformat(),
-            'device': animal.device.mac_address if hasattr(animal, 'device') else None,
-        }, status=200)
-    
-    elif request.method == 'DELETE':
-        animal.delete()
-        return Response({"message": "Hayvan silindi"}, status=200)
+        elif request.method == 'DELETE':
+            animal.delete()
+            return Response({"message": "Hayvan silindi"}, status=200)
 
 
 # ─────────────────────────────────────────────
@@ -774,3 +971,35 @@ def unassign_animal_from_device(request):
         }, status=200)
     else:
         return Response({"message": "Bu cihazda atanmış hayvan yok"}, status=200)
+
+@api_view(['GET'])
+def dashboard_summary(request):
+"""
+Dashboard için özet verileri döner:
+- total_active_animals: Aktif hayvan sayısı
+- excited_animals: Kızgın (excited_count > 0) aktif hayvan sayısı
+- total_steps: Tüm cihazların toplam adımı
+"""
+# Aktif hayvanları say
+total_active_animals = Animal.objects.filter(is_active=True).count()
+
+# excited_count > 0 olan aktif hayvanları say (GunlukAktivite'den bugünkü)
+bugun = date.today()
+excited_activities = GunlukAktivite.objects.filter(
+    tarih=bugun,
+    excited_count__gt=0
+).values_list('mac', flat=True)
+
+# Bu mac adreslerine sahip hayvanları say (cihazlar üzerinden)
+excited_devices = Device.objects.filter(mac_address__in=excited_activities)
+excited_animals = excited_devices.filter(animal__is_active=True).count()
+
+# Tüm cihazların toplam adımını hesapla
+total_steps_result = Device.objects.aggregate(total=Sum('total_steps'))
+total_steps = total_steps_result['total'] or 0
+
+return Response({
+    "total_active_animals": total_active_animals,
+    "excited_animals": excited_animals,
+    "total_steps": total_steps
+}, status=200)

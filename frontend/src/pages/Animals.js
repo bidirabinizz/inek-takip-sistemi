@@ -19,7 +19,7 @@ function getCookie(name) {
 }
 
 const Animals = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, userRole } = useAuth();
   const navigate = useNavigate();
   const [animals, setAnimals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -167,12 +167,14 @@ const Animals = () => {
               <h1 className="text-3xl font-bold text-white mb-2">Hayvan Yönetimi</h1>
               <p className="text-gray-400">Küpe numaraları ve hayvan bilgileri</p>
             </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200"
-            >
-              + Yeni Hayvan Ekle
-            </button>
+            {userRole !== 'WORKER' && (
+              <button
+                onClick={() => setShowModal(true)}
+                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200"
+              >
+                + Yeni Hayvan Ekle
+              </button>
+            )}
           </div>
 
           {message.text && (
@@ -215,20 +217,34 @@ const Animals = () => {
                       </td>
                       <td className="py-4 px-4 text-gray-300 font-mono">{animal.device || '-'}</td>
                       <td className="py-4 px-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleToggleActive(animal.id, animal.is_active)}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-                          >
-                            {animal.is_active ? 'Pasif Yap' : 'Aktif Yap'}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(animal.id)}
-                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
-                          >
-                            Sil
-                          </button>
-                        </div>
+                        {userRole !== 'WORKER' ? (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleToggleActive(animal.id, animal.is_active)}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                            >
+                              {animal.is_active ? 'Pasif Yap' : 'Aktif Yap'}
+                            </button>
+                            <button
+                              onClick={() => handleDelete(animal.id)}
+                              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                            >
+                              Sil
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500 text-sm">-</span>
+                        )}
+                        {animal.device && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => navigate(`/report/${animal.device}`)}
+                              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors"
+                            >
+                              Detaylı Rapor
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
