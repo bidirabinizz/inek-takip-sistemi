@@ -32,13 +32,27 @@ def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
 
 
+class Paddock(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, default="")
+    capacity = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'Paddock'
+
+    def __str__(self):
+        return self.name
+
+
 class Animal(models.Model):
     ear_tag     = models.CharField(max_length=50, unique=True)
     name        = models.CharField(max_length=100, blank=True, default="")
     birth_date  = models.DateField(null=True, blank=True)
     gender      = models.CharField(max_length=20, default='Female')
     is_active   = models.BooleanField(default=True)
-    paddock     = models.CharField(max_length=50, blank=True, null=True)  # Yeni alan: Padok
+    paddock     = models.ForeignKey(Paddock, on_delete=models.SET_NULL, null=True, blank=True, related_name='animals')
     created_at  = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -168,3 +182,106 @@ class SystemSettings(models.Model):
             'WINDOW_SIZE': self.WINDOW_SIZE,
             'FETCH_INTERVAL_MS': self.FETCH_INTERVAL_MS,
         }
+
+
+# ─────────────────────────────────────────────
+#  YAPAY DÖLLEME (Insemination) TAKİBİ
+# ─────────────────────────────────────────────
+class Insemination(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Sonuç Bekleniyor'),
+        ('SUCCESS', 'Gebe (Başarılı)'),
+        ('FAILED', 'Tutmadı (Başarısız)'),
+        ('CANCELLED', 'İptal Edildi'),
+    )
+
+    animal = models.ForeignKey(Animal, on_delete=models.CASCADE, related_name='inseminations')
+    insemination_date = models.DateTimeField()
+    bull_info = models.CharField(max_length=200, blank=True, default="")
+    technician = models.CharField(max_length=100, blank=True, default="")
+    performed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+
+    pregnancy_check_date = models.DateField(null=True, blank=True)
+    expected_calving_date = models.DateField(null=True, blank=True)
+    next_heat_expected = models.DateField(null=True, blank=True)
+    actual_calving_date = models.DateField(null=True, blank=True)
+
+    notes = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'Insemination'
+        ordering = ['-insemination_date']
+
+    def __str__(self):
+        return f"{self.animal.ear_tag} | {self.insemination_date.strftime('%d/%m/%Y')} | {self.get_status_display()}"
+
+
+# ─────────────────────────────────────────────
+#  DİNAMİK İZİN YÖNETİMİ
+# ─────────────────────────────────────────────
+ALL_PERMISSIONS = [
+    ('view_dashboard', 'Dashboard Görüntüle'),
+    ('view_devices', 'Cihazlar Görüntüle'),
+    ('view_animals', 'Hayvanlar Görüntüle'),
+    ('view_paddocks', 'Padoklar Görüntüle'),
+    ('view_breeding', 'Dölleme Takip Görüntüle'),
+    ('view_settings', 'Ayarlar Görüntüle'),
+    ('view_users', 'Kullanıcılar Görüntüle'),
+    ('view_reports', 'Raporlar Görüntüle'),
+    ('manage_devices', 'Cihaz Yönetimi'),
+    ('manage_animals', 'Hayvan Yönetimi'),
+    ('manage_paddocks', 'Padok Yönetimi'),
+    ('manage_breeding', 'Dölleme Yönetimi'),
+    ('manage_settings', 'Ayar Yönetimi'),
+    ('manage_users', 'Kullanıcı Yönetimi'),
+]
+
+DEFAULT_PERMISSIONS = {
+    'ADMIN': [p[0] for p in ALL_PERMISSIONS],  # Hepsi
+    'VET': [
+        'view_dashboard', 'view_devices', 'view_animals', 'view_paddocks',
+        'view_breeding', 'view_reports',
+        'manage_devices', 'manage_animals', 'manage_paddocks', 'manage_breeding',
+    ],
+    'WORKER': [
+        'view_dashboard', 'view_devices', 'view_animals', 'view_paddocks',
+    ],
+}
+
+
+class RolePermission(models.Model):
+    role = models.CharField(max_length=20, choices=UserProfile.ROLE_CHOICES)
+    permission_key = models.CharField(max_length=50)
+    is_allowed = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'RolePermission'
+        unique_together = ('role', 'permission_key')
+
+    def __str__(self):
+        status = '✅' if self.is_allowed else '❌'
+        return f"{self.role} | {self.permission_key} | {status}"
+
+    @classmethod
+    def initialize_defaults(cls):
+        """Varsayılan izinleri oluşturur (sadece eksik olanları)."""
+        for role, perms in DEFAULT_PERMISSIONS.items():
+            for perm_key, _ in ALL_PERMISSIONS:
+                cls.objects.get_or_create(
+                    role=role,
+                    permission_key=perm_key,
+                    defaults={'is_allowed': perm_key in perms}
+                )
+
+    @classmethod
+    def get_permissions_for_role(cls, role):
+        """Bir rolün izin verilen anahtarlarını döner."""
+        if role == 'ADMIN':
+            return [p[0] for p in ALL_PERMISSIONS]
+        return list(
+            cls.objects.filter(role=role, is_allowed=True)
+            .values_list('permission_key', flat=True)
+        )

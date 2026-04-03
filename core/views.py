@@ -1,12 +1,45 @@
+from functools import wraps
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import AccelerometerData, Device, GunlukAktivite, SystemSettings, Animal, UserProfile
+from .models import (
+    AccelerometerData, Device, GunlukAktivite, SystemSettings,
+    Animal, UserProfile, Paddock, Insemination,
+    RolePermission, ALL_PERMISSIONS
+)
 from django.contrib.auth.models import User
-from django.db.models import Sum
+from django.db.models import Sum, Count
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_datetime, parse_date
 from django.utils.timezone import make_aware, is_naive, localtime
 from datetime import date, timedelta
+
+
+# ─────────────────────────────────────────────
+#  İZİN SİSTEMİ YARDIMCILARI
+# ─────────────────────────────────────────────
+def has_permission(user, permission_key):
+    """Kullanıcının belirli bir izni olup olmadığını kontrol eder."""
+    if not user.is_authenticated:
+        return False
+    role = user.profile.role if hasattr(user, 'profile') else 'WORKER'
+    if role == 'ADMIN':
+        return True
+    perm = RolePermission.objects.filter(role=role, permission_key=permission_key).first()
+    return perm.is_allowed if perm else False
+
+
+def require_permission(permission_key):
+    """View dekoratörü — izin kontrolü yapar."""
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return Response({"error": "Authentication required"}, status=401)
+            if not has_permission(request.user, permission_key):
+                return Response({"error": "Bu işlem için yetkiniz yok"}, status=403)
+            return view_func(request, *args, **kwargs)
+        return wrapper
+    return decorator
 
 
 # ─────────────────────────────────────────────
@@ -614,7 +647,7 @@ def user_list(request):
     return Response(data, status=200)
 
 
-api_view(['POST'])
+@api_view(['POST'])
 def user_create(request):
     """
     Yeni kullanıcı oluşturur.
@@ -780,10 +813,11 @@ def animal_list(request):
             'id': animal.id,
             'ear_tag': animal.ear_tag,
             'name': animal.name,
-            'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+            'birth_date': str(animal.birth_date) if animal.birth_date else None,
             'gender': animal.gender,
             'is_active': animal.is_active,
-            'paddock': animal.paddock,
+            'paddock': animal.paddock.name if animal.paddock else None,
+            'paddock_id': animal.paddock_id,
             'created_at': animal.created_at.isoformat(),
             'device': animal.device.mac_address if hasattr(animal, 'device') else None,
         })
@@ -816,17 +850,18 @@ def animal_create(request):
         birth_date=request.data.get('birth_date'),
         gender=request.data.get('gender', 'Female'),
         is_active=request.data.get('is_active', True),
-        paddock=request.data.get('paddock', None)
+        paddock_id=request.data.get('paddock_id', None)
     )
     
     return Response({
         'id': animal.id,
         'ear_tag': animal.ear_tag,
         'name': animal.name,
-        'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+        'birth_date': str(animal.birth_date) if animal.birth_date else None,
         'gender': animal.gender,
         'is_active': animal.is_active,
-        'paddock': animal.paddock,
+        'paddock': animal.paddock.name if animal.paddock else None,
+        'paddock_id': animal.paddock_id,
         'created_at': animal.created_at.isoformat(),
         'device': None,
     }, status=201)
@@ -852,10 +887,11 @@ def animal_detail(request, id):
             'id': animal.id,
             'ear_tag': animal.ear_tag,
             'name': animal.name,
-            'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+            'birth_date': str(animal.birth_date) if animal.birth_date else None,
             'gender': animal.gender,
             'is_active': animal.is_active,
-            'paddock': animal.paddock,
+            'paddock': animal.paddock.name if animal.paddock else None,
+            'paddock_id': animal.paddock_id,
             'created_at': animal.created_at.isoformat(),
             'device': animal.device.mac_address if hasattr(animal, 'device') else None,
         }, status=200)
@@ -881,8 +917,9 @@ def animal_detail(request, id):
                 animal.gender = request.data.get('gender', 'Female')
             if 'is_active' in request.data:
                 animal.is_active = request.data.get('is_active', True)
-            if 'paddock' in request.data:
-                animal.paddock = request.data.get('paddock')
+            if 'paddock_id' in request.data:
+                val = request.data.get('paddock_id')
+                animal.paddock_id = val if val else None
             
             animal.save()
             
@@ -890,10 +927,11 @@ def animal_detail(request, id):
                 'id': animal.id,
                 'ear_tag': animal.ear_tag,
                 'name': animal.name,
-                'birth_date': animal.birth_date.isoformat() if animal.birth_date else None,
+                'birth_date': str(animal.birth_date) if animal.birth_date else None,
                 'gender': animal.gender,
                 'is_active': animal.is_active,
-                'paddock': animal.paddock,
+                'paddock': animal.paddock.name if animal.paddock else None,
+                'paddock_id': animal.paddock_id,
                 'created_at': animal.created_at.isoformat(),
                 'device': animal.device.mac_address if hasattr(animal, 'device') else None,
             }, status=200)
@@ -991,16 +1029,16 @@ def dashboard_summary(request):
     # Aktif hayvanları say
     total_active_animals = Animal.objects.filter(is_active=True).count()
 
-    # excited_count > 0 olan aktif hayvanları say (GunlukAktivite'den bugünkü)
+    # Bugün kızgınlık alarmı olan cihazları say
     bugun = date.today()
-    excited_activities = GunlukAktivite.objects.filter(
+    alarm_activities = GunlukAktivite.objects.filter(
         tarih=bugun,
-        excited_count__gt=0
+        kizginlik_alarm=True
     ).values_list('mac', flat=True)
 
     # Bu mac adreslerine sahip hayvanları say (cihazlar üzerinden)
-    excited_devices = Device.objects.filter(mac_address__in=excited_activities)
-    excited_animals = excited_devices.filter(animal__is_active=True).count()
+    alarm_devices = Device.objects.filter(mac_address__in=alarm_activities)
+    excited_animals = alarm_devices.filter(animal__is_active=True).count()
 
     # Tüm cihazların toplam adımını hesapla
     total_steps_result = Device.objects.aggregate(total=Sum('total_steps'))
@@ -1010,4 +1048,410 @@ def dashboard_summary(request):
         "total_active_animals": total_active_animals,
         "excited_animals": excited_animals,
         "total_steps": total_steps
+    }, status=200)
+
+
+# ─────────────────────────────────────────────
+#  İZİN YÖNETİMİ API
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+def get_my_permissions(request):
+    """Giriş yapan kullanıcının izin listesini döner."""
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+
+    role = request.user.profile.role if hasattr(request.user, 'profile') else 'WORKER'
+    RolePermission.initialize_defaults()
+    permissions = RolePermission.get_permissions_for_role(role)
+    return Response({
+        "role": role,
+        "permissions": permissions
+    }, status=200)
+
+
+@api_view(['GET'])
+@require_permission('manage_users')
+def get_all_permissions(request):
+    """Tüm rollerin tüm izinlerini döner. Sadece admin."""
+    RolePermission.initialize_defaults()
+
+    result = {}
+    for role_key, role_label in UserProfile.ROLE_CHOICES:
+        perms = {}
+        for perm_key, perm_label in ALL_PERMISSIONS:
+            rp = RolePermission.objects.filter(role=role_key, permission_key=perm_key).first()
+            perms[perm_key] = {
+                "label": perm_label,
+                "allowed": rp.is_allowed if rp else False,
+                "locked": role_key == 'ADMIN'
+            }
+        result[role_key] = {
+            "label": role_label,
+            "permissions": perms
+        }
+
+    return Response(result, status=200)
+
+
+@api_view(['POST'])
+@require_permission('manage_users')
+def update_permissions(request):
+    """Bir rolün izinlerini toplu günceller. Sadece admin."""
+    role = request.data.get('role')
+    permissions = request.data.get('permissions', {})
+
+    if not role or role not in dict(UserProfile.ROLE_CHOICES):
+        return Response({"error": "Geçersiz rol"}, status=400)
+
+    if role == 'ADMIN':
+        return Response({"error": "Admin izinleri değiştirilemez"}, status=400)
+
+    for perm_key, is_allowed in permissions.items():
+        RolePermission.objects.update_or_create(
+            role=role,
+            permission_key=perm_key,
+            defaults={'is_allowed': bool(is_allowed)}
+        )
+
+    return Response({"status": "success", "message": f"{role} izinleri güncellendi"}, status=200)
+
+
+# ─────────────────────────────────────────────
+#  PADOK YÖNETİMİ API
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+def paddock_list(request):
+    """Tüm padokları listele (hayvan sayısı ile)."""
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+
+    from django.db import models as db_models
+    paddocks = Paddock.objects.filter(is_active=True).annotate(
+        animal_count=Count('animals', filter=db_models.Q(animals__is_active=True))
+    ).order_by('name')
+
+    data = []
+    for p in paddocks:
+        data.append({
+            'id': p.id,
+            'name': p.name,
+            'description': p.description,
+            'capacity': p.capacity,
+            'animal_count': p.animal_count,
+            'is_active': p.is_active,
+            'created_at': p.created_at.isoformat(),
+        })
+    return Response(data, status=200)
+
+
+@api_view(['POST'])
+@require_permission('manage_paddocks')
+def paddock_create(request):
+    """Yeni padok oluştur."""
+    name = request.data.get('name')
+    if not name:
+        return Response({"error": "Padok adı gerekli"}, status=400)
+
+    if Paddock.objects.filter(name=name).exists():
+        return Response({"error": "Bu isimde bir padok zaten var"}, status=400)
+
+    paddock = Paddock.objects.create(
+        name=name,
+        description=request.data.get('description', ''),
+        capacity=int(request.data.get('capacity', 0)),
+    )
+
+    return Response({
+        'id': paddock.id,
+        'name': paddock.name,
+        'description': paddock.description,
+        'capacity': paddock.capacity,
+        'animal_count': 0,
+        'is_active': paddock.is_active,
+        'created_at': paddock.created_at.isoformat(),
+    }, status=201)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+def paddock_detail(request, id):
+    """Padok detay/güncelle/sil."""
+    if not request.user.is_authenticated:
+        return Response({"error": "Authentication required"}, status=401)
+
+    try:
+        paddock = Paddock.objects.get(id=id)
+    except Paddock.DoesNotExist:
+        return Response({"error": "Padok bulunamadı"}, status=404)
+
+    if request.method == 'GET':
+        animal_count = paddock.animals.filter(is_active=True).count()
+        animals_list = list(paddock.animals.filter(is_active=True).values('id', 'ear_tag', 'name'))
+        return Response({
+            'id': paddock.id,
+            'name': paddock.name,
+            'description': paddock.description,
+            'capacity': paddock.capacity,
+            'animal_count': animal_count,
+            'animals': animals_list,
+            'is_active': paddock.is_active,
+            'created_at': paddock.created_at.isoformat(),
+        }, status=200)
+
+    if not has_permission(request.user, 'manage_paddocks'):
+        return Response({"error": "Bu işlem için yetkiniz yok"}, status=403)
+
+    if request.method == 'PUT':
+        if 'name' in request.data:
+            new_name = request.data['name']
+            if Paddock.objects.filter(name=new_name).exclude(id=paddock.id).exists():
+                return Response({"error": "Bu isimde bir padok zaten var"}, status=400)
+            paddock.name = new_name
+        if 'description' in request.data:
+            paddock.description = request.data['description']
+        if 'capacity' in request.data:
+            paddock.capacity = int(request.data['capacity'])
+        if 'is_active' in request.data:
+            paddock.is_active = request.data['is_active']
+        paddock.save()
+        return Response({
+            'id': paddock.id,
+            'name': paddock.name,
+            'description': paddock.description,
+            'capacity': paddock.capacity,
+            'is_active': paddock.is_active,
+        }, status=200)
+
+    elif request.method == 'DELETE':
+        paddock.is_active = False
+        paddock.save()
+        return Response({"message": "Padok pasife alındı"}, status=200)
+
+
+# ─────────────────────────────────────────────
+#  YAPAY DÖLLEME (Insemination) API
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+@require_permission('view_breeding')
+def insemination_list(request):
+    """Dölleme kayıtlarını listele (filtreli)."""
+    queryset = Insemination.objects.select_related('animal', 'performed_by').all()
+
+    status_filter = request.GET.get('status')
+    animal_id = request.GET.get('animal_id')
+
+    if status_filter:
+        queryset = queryset.filter(status=status_filter)
+    if animal_id:
+        queryset = queryset.filter(animal_id=animal_id)
+
+    data = []
+    now = date.today()
+    for ins in queryset[:100]:
+        days_since = (now - ins.insemination_date.date()).days if ins.insemination_date else 0
+        data.append({
+            'id': ins.id,
+            'animal': {
+                'id': ins.animal.id,
+                'ear_tag': ins.animal.ear_tag,
+                'name': ins.animal.name,
+            },
+            'insemination_date': ins.insemination_date.isoformat(),
+            'bull_info': ins.bull_info,
+            'technician': ins.technician,
+            'performed_by': ins.performed_by.username if ins.performed_by else None,
+            'status': ins.status,
+            'status_display': ins.get_status_display(),
+            'days_since': days_since,
+            'pregnancy_check_date': ins.pregnancy_check_date.isoformat() if ins.pregnancy_check_date else None,
+            'expected_calving_date': ins.expected_calving_date.isoformat() if ins.expected_calving_date else None,
+            'next_heat_expected': ins.next_heat_expected.isoformat() if ins.next_heat_expected else None,
+            'actual_calving_date': ins.actual_calving_date.isoformat() if ins.actual_calving_date else None,
+            'notes': ins.notes,
+            'created_at': ins.created_at.isoformat(),
+        })
+
+    pending_count = Insemination.objects.filter(status='PENDING').count()
+    success_count = Insemination.objects.filter(
+        status='SUCCESS',
+        updated_at__month=now.month, updated_at__year=now.year
+    ).count()
+    failed_count = Insemination.objects.filter(
+        status='FAILED',
+        updated_at__month=now.month, updated_at__year=now.year
+    ).count()
+    upcoming_checks = Insemination.objects.filter(
+        status='PENDING',
+        pregnancy_check_date__lte=now + timedelta(days=7),
+        pregnancy_check_date__gte=now
+    ).count()
+
+    return Response({
+        "results": data,
+        "summary": {
+            "pending": pending_count,
+            "success_this_month": success_count,
+            "failed_this_month": failed_count,
+            "upcoming_checks": upcoming_checks,
+        }
+    }, status=200)
+
+
+@api_view(['POST'])
+@require_permission('manage_breeding')
+def insemination_create(request):
+    """Yeni dölleme kaydı oluştur."""
+    animal_id = request.data.get('animal_id')
+    insemination_date_str = request.data.get('insemination_date')
+
+    if not animal_id or not insemination_date_str:
+        return Response({"error": "animal_id ve insemination_date gerekli"}, status=400)
+
+    try:
+        animal = Animal.objects.get(id=animal_id)
+    except Animal.DoesNotExist:
+        return Response({"error": "Hayvan bulunamadı"}, status=404)
+
+    ins_date = parse_datetime(insemination_date_str)
+    if not ins_date:
+        ins_date_d = parse_date(insemination_date_str)
+        if ins_date_d:
+            ins_date = timezone.make_aware(
+                timezone.datetime.combine(ins_date_d, timezone.datetime.min.time())
+            )
+        else:
+            return Response({"error": "Geçersiz tarih formatı"}, status=400)
+
+    ins_date_only = ins_date.date() if hasattr(ins_date, 'date') else ins_date
+
+    ins = Insemination.objects.create(
+        animal=animal,
+        insemination_date=ins_date,
+        bull_info=request.data.get('bull_info', ''),
+        technician=request.data.get('technician', ''),
+        performed_by=request.user,
+        status='PENDING',
+        next_heat_expected=ins_date_only + timedelta(days=21),
+        pregnancy_check_date=ins_date_only + timedelta(days=30),
+        notes=request.data.get('notes', ''),
+    )
+
+    return Response({
+        'id': ins.id,
+        'animal': {'id': animal.id, 'ear_tag': animal.ear_tag, 'name': animal.name},
+        'insemination_date': ins.insemination_date.isoformat(),
+        'status': ins.status,
+        'next_heat_expected': ins.next_heat_expected.isoformat(),
+        'pregnancy_check_date': ins.pregnancy_check_date.isoformat(),
+    }, status=201)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@require_permission('view_breeding')
+def insemination_detail(request, id):
+    """Dölleme detay/güncelle/sil."""
+    try:
+        ins = Insemination.objects.select_related('animal', 'performed_by').get(id=id)
+    except Insemination.DoesNotExist:
+        return Response({"error": "Dölleme kaydı bulunamadı"}, status=404)
+
+    if request.method == 'GET':
+        days_since = (date.today() - ins.insemination_date.date()).days
+        return Response({
+            'id': ins.id,
+            'animal': {'id': ins.animal.id, 'ear_tag': ins.animal.ear_tag, 'name': ins.animal.name},
+            'insemination_date': ins.insemination_date.isoformat(),
+            'bull_info': ins.bull_info,
+            'technician': ins.technician,
+            'performed_by': ins.performed_by.username if ins.performed_by else None,
+            'status': ins.status,
+            'status_display': ins.get_status_display(),
+            'days_since': days_since,
+            'pregnancy_check_date': ins.pregnancy_check_date.isoformat() if ins.pregnancy_check_date else None,
+            'expected_calving_date': ins.expected_calving_date.isoformat() if ins.expected_calving_date else None,
+            'next_heat_expected': ins.next_heat_expected.isoformat() if ins.next_heat_expected else None,
+            'actual_calving_date': ins.actual_calving_date.isoformat() if ins.actual_calving_date else None,
+            'notes': ins.notes,
+        }, status=200)
+
+    if not has_permission(request.user, 'manage_breeding'):
+        return Response({"error": "Bu işlem için yetkiniz yok"}, status=403)
+
+    if request.method == 'PUT':
+        for field in ['bull_info', 'technician', 'notes']:
+            if field in request.data:
+                setattr(ins, field, request.data[field])
+        if 'actual_calving_date' in request.data:
+            ins.actual_calving_date = parse_date(request.data['actual_calving_date'])
+        ins.save()
+        return Response({"status": "updated"}, status=200)
+
+    elif request.method == 'DELETE':
+        ins.delete()
+        return Response({"message": "Dölleme kaydı silindi"}, status=200)
+
+
+@api_view(['PUT'])
+@require_permission('manage_breeding')
+def insemination_update_status(request, id):
+    """Dölleme durumunu güncelle (Tuttu/Tutmadı)."""
+    try:
+        ins = Insemination.objects.get(id=id)
+    except Insemination.DoesNotExist:
+        return Response({"error": "Dölleme kaydı bulunamadı"}, status=404)
+
+    new_status = request.data.get('status')
+    if new_status not in ['SUCCESS', 'FAILED', 'CANCELLED']:
+        return Response({"error": "Geçersiz durum. SUCCESS, FAILED veya CANCELLED olmalı"}, status=400)
+
+    ins.status = new_status
+
+    if new_status == 'SUCCESS':
+        ins.expected_calving_date = ins.insemination_date.date() + timedelta(days=280)
+        ins.next_heat_expected = None
+    elif new_status == 'FAILED':
+        ins.next_heat_expected = date.today() + timedelta(days=21)
+        ins.expected_calving_date = None
+
+    if 'notes' in request.data:
+        ins.notes = request.data['notes']
+
+    ins.save()
+
+    return Response({
+        "status": ins.status,
+        "status_display": ins.get_status_display(),
+        "expected_calving_date": ins.expected_calving_date.isoformat() if ins.expected_calving_date else None,
+        "next_heat_expected": ins.next_heat_expected.isoformat() if ins.next_heat_expected else None,
+    }, status=200)
+
+
+@api_view(['GET'])
+@require_permission('view_breeding')
+def animal_breeding_history(request, id):
+    """Bir hayvanın tüm dölleme geçmişi."""
+    try:
+        animal = Animal.objects.get(id=id)
+    except Animal.DoesNotExist:
+        return Response({"error": "Hayvan bulunamadı"}, status=404)
+
+    inseminations = Insemination.objects.filter(animal=animal).order_by('-insemination_date')
+    data = []
+    for ins in inseminations:
+        data.append({
+            'id': ins.id,
+            'insemination_date': ins.insemination_date.isoformat(),
+            'bull_info': ins.bull_info,
+            'technician': ins.technician,
+            'status': ins.status,
+            'status_display': ins.get_status_display(),
+            'expected_calving_date': ins.expected_calving_date.isoformat() if ins.expected_calving_date else None,
+            'actual_calving_date': ins.actual_calving_date.isoformat() if ins.actual_calving_date else None,
+            'notes': ins.notes,
+        })
+
+    return Response({
+        "animal": {"id": animal.id, "ear_tag": animal.ear_tag, "name": animal.name},
+        "total_inseminations": len(data),
+        "success_count": sum(1 for d in data if d['status'] == 'SUCCESS'),
+        "history": data,
     }, status=200)

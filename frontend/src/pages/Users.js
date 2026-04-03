@@ -1,367 +1,315 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { usePermission } from '../hooks/usePermission';
 import { API_BASE } from '../config';
 import { useNavigate } from 'react-router-dom';
-
-function getCookie(name) {
-  let cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim();
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
-    }
-  }
-  return cookieValue;
-}
+import axios from 'axios';
 
 const Users = () => {
   const { isAuthenticated, userRole } = useAuth();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('users'); // 'users' veya 'permissions'
+  
+  // Users state
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    role: 'WORKER',
-  });
+  const [formData, setFormData] = useState({ username: '', email: '', password: '', role: 'WORKER' });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [submitting, setSubmitting] = useState(false);
 
+  // Permissions state
+  const [rolesData, setRolesData] = useState(null);
+  const [savingPerms, setSavingPerms] = useState(false);
+
+  const canManageUsers = usePermission('manage_users');
+
   useEffect(() => {
     if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    if (!canManageUsers) {
       navigate('/');
       return;
     }
-    if (userRole !== 'ADMIN') {
-      navigate('/');
-      return;
-    }
-    fetchUsers();
-  }, [isAuthenticated, userRole, navigate]);
+    fetchData();
+  }, [isAuthenticated, canManageUsers, navigate]);
 
-  const fetchUsers = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/users/`, {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setUsers(data);
-      } else {
-        setMessage({ type: 'error', text: 'Kullanıcılar yüklenemedi' });
-      }
+      const [usersRes, permsRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/users/`),
+        axios.get(`${API_BASE}/api/permissions/all/`)
+      ]);
+      setUsers(usersRes.data);
+      setRolesData(permsRes.data);
     } catch (error) {
-      setMessage({ type: 'error', text: 'Bağlantı hatası' });
+      setMessage({ type: 'error', text: 'Veriler yüklenirken hata oluştu' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (e) => {
+  // --- Users Handlers ---
+  const handleUserSubmit = async (e) => {
     e.preventDefault();
-    
     if (submitting) return;
-    
     setSubmitting(true);
     setMessage({ type: '', text: '' });
 
     try {
-      const response = await fetch(`${API_BASE}/api/users/create/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken')
-        },
-        credentials: 'include',
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Kullanıcı başarıyla oluşturuldu' });
-        setFormData({
-          username: '',
-          email: '',
-          password: '',
-          role: 'WORKER',
-        });
-        setShowModal(false);
-        fetchUsers();
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Oluşturma başarısız' });
-      }
+      await axios.post(`${API_BASE}/api/users/create/`, formData);
+      setMessage({ type: 'success', text: 'Kullanıcı başarıyla oluşturuldu' });
+      setFormData({ username: '', email: '', password: '', role: 'WORKER' });
+      setShowModal(false);
+      fetchData();
     } catch (error) {
-      console.error("Hata detayı:", error);
-      setMessage({ type: 'error', text: 'Bağlantı hatası' });
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Oluşturma başarısız' });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id, username) => {
+  const handleDeleteUser = async (id, username) => {
     if (!window.confirm(`"${username}" kullanıcısını silmek istediğinize emin misiniz?`)) return;
-
     try {
-      const response = await fetch(`${API_BASE}/api/users/${id}/`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRFToken': getCookie('csrftoken')
-        },
-        credentials: 'include'
-      });
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Kullanıcı silindi' });
-        fetchUsers();
-      } else {
-        setMessage({ type: 'error', text: 'Silme başarısız' });
-      }
+      await axios.delete(`${API_BASE}/api/users/${id}/`);
+      setMessage({ type: 'success', text: 'Kullanıcı silindi' });
+      fetchData();
     } catch (error) {
-      setMessage({ type: 'error', text: 'Bağlantı hatası' });
+      setMessage({ type: 'error', text: 'Silme işlemi başarısız' });
     }
   };
 
   const handleRoleChange = async (id, newRole) => {
     try {
-      const response = await fetch(`${API_BASE}/api/users/${id}/role/`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken')
-        },
-        credentials: 'include',
-        body: JSON.stringify({ role: newRole }),
-      });
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Rol güncellendi' });
-        fetchUsers();
-      } else {
-        setMessage({ type: 'error', text: 'Rol güncelleme başarısız' });
-      }
+      await axios.put(`${API_BASE}/api/users/${id}/role/`, { role: newRole });
+      setMessage({ type: 'success', text: 'Rol güncellendi' });
+      fetchData();
     } catch (error) {
-      setMessage({ type: 'error', text: 'Bağlantı hatası' });
+      setMessage({ type: 'error', text: 'Rol güncelleme başarısız' });
+    }
+  };
+
+  // --- Permissions Handlers ---
+  const togglePermission = (roleKey, permKey) => {
+    if (roleKey === 'ADMIN') return; // Admin locked
+    
+    setRolesData(prev => {
+      const newData = { ...prev };
+      newData[roleKey].permissions[permKey].allowed = !newData[roleKey].permissions[permKey].allowed;
+      return newData;
+    });
+  };
+
+  const handleSavePermissions = async (roleKey) => {
+    setSavingPerms(true);
+    const permsToSave = {};
+    Object.keys(rolesData[roleKey].permissions).forEach(k => {
+      permsToSave[k] = rolesData[roleKey].permissions[k].allowed;
+    });
+
+    try {
+      await axios.post(`${API_BASE}/api/permissions/update/`, {
+        role: roleKey,
+        permissions: permsToSave
+      });
+      setMessage({ type: 'success', text: `${rolesData[roleKey].label} izinleri başarıyla güncellendi!` });
+    } catch (err) {
+      setMessage({ type: 'error', text: 'İzinler güncellenemedi' });
+    } finally {
+      setSavingPerms(false);
+      setTimeout(() => setMessage({type: '', text:''}), 3000);
     }
   };
 
   const getRoleBadgeClass = (role) => {
     switch (role) {
-      case 'ADMIN':
-        return 'bg-purple-900/50 text-purple-300 border-purple-500';
-      case 'VET':
-        return 'bg-blue-900/50 text-blue-300 border-blue-500';
-      case 'WORKER':
-        return 'bg-gray-700 text-gray-300 border-gray-500';
-      default:
-        return 'bg-gray-700 text-gray-300 border-gray-500';
-    }
-  };
-
-  const getRoleLabel = (role) => {
-    switch (role) {
-      case 'ADMIN':
-        return 'Admin (Patron)';
-      case 'VET':
-        return 'Veteriner';
-      case 'WORKER':
-        return 'İşçi';
-      default:
-        return role;
+      case 'ADMIN': return 'bg-purple-900/50 text-purple-300 border-purple-500';
+      case 'VET': return 'bg-blue-900/50 text-blue-300 border-blue-500';
+      default: return 'bg-gray-700 text-gray-300 border-gray-500';
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
-        <div className="text-white text-xl">Yükleniyor...</div>
+      <div className="min-h-screen flex items-center justify-center bg-cyber-dark">
+         <div className="w-12 h-12 border-t-2 border-cyber-green rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Kullanıcı Yönetimi</h1>
-              <p className="text-gray-400">Sistem kullanıcıları ve rolleri</p>
-            </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200"
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      
+      {/* Header and Tabs */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">👥 Sistem Yönetimi</h1>
+          <div className="flex gap-4 border-b border-cyber-gray/20">
+            <button 
+              onClick={() => setActiveTab('users')}
+              className={`pb-2 text-lg font-semibold transition-colors ${activeTab === 'users' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
             >
-              + Yeni Kullanıcı Ekle
+              Kullanıcılar
+            </button>
+            <button 
+              onClick={() => setActiveTab('permissions')}
+              className={`pb-2 text-lg font-semibold transition-colors ${activeTab === 'permissions' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
+            >
+              Roller & İzinler
             </button>
           </div>
-
-          {message.text && (
-            <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-900/50 border border-green-500 text-green-200' : 'bg-red-900/50 border border-red-500 text-red-200'}`}>
-              {message.text}
-            </div>
-          )}
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Kullanıcı Adı</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">E-posta</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Rol</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Katılım Tarihi</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="py-8 text-center text-gray-400">
-                      Henüz kullanıcı yok
-                    </td>
-                  </tr>
-                ) : (
-                  users.map((user) => (
-                    <tr key={user.id} className="border-b border-gray-700 hover:bg-gray-700/30 transition-colors">
-                      <td className="py-4 px-4 text-white font-mono">{user.username}</td>
-                      <td className="py-4 px-4 text-gray-300">{user.email || '-'}</td>
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getRoleBadgeClass(user.role)}`}>
-                            {getRoleLabel(user.role)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-gray-300">
-                        {new Date(user.date_joined).toLocaleDateString('tr-TR')}
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex gap-2">
-                          <select
-                            value={user.role}
-                            onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                            disabled={user.username === 'superadmin'} // Prevent role change for superadmin
-                            className="px-3 py-1 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <option value="ADMIN">Admin</option>
-                            <option value="VET">Veteriner</option>
-                            <option value="WORKER">İşçi</option>
-                          </select>
-                          <button
-                            onClick={() => handleDelete(user.id, user.username)}
-                            disabled={user.username === 'superadmin'} // Prevent deletion of superadmin
-                            className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={user.username === 'superadmin' ? 'Superadmin silinemez' : 'Kullanıcıyı Sil'}
-                          >
-                            Sil
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
+        
+        {activeTab === 'users' && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-cyber-green text-black px-4 py-2 rounded-xl font-bold hover:bg-green-500 transition shadow-lg shadow-cyber-green/20"
+          >
+            + Yeni Kullanıcı
+          </button>
+        )}
       </div>
 
-      {/* Modal */}
+      {message.text && (
+        <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-900/40 border-green-500 text-green-300' : 'bg-red-900/40 border-red-500 text-red-300'}`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* TABS CONTENT */}
+      {activeTab === 'users' ? (
+        <div className="bg-cyber-dark/80 border border-cyber-green/20 rounded-2xl overflow-hidden shadow-xl">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-cyber-darkBlue/80 text-cyber-green">
+              <tr>
+                <th className="px-6 py-4">Kullanıcı Adı</th>
+                <th className="px-6 py-4">E-posta</th>
+                <th className="px-6 py-4">Rol</th>
+                <th className="px-6 py-4 text-right">İşlemler</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-cyber-gray/10 text-white">
+              {users.map((user) => (
+                <tr key={user.id} className="hover:bg-cyber-darkBlue/40">
+                  <td className="px-6 py-4 font-mono">{user.username}</td>
+                  <td className="px-6 py-4 text-cyber-gray">{user.email || '-'}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs border ${getRoleBadgeClass(user.role)}`}>
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right flex justify-end gap-2">
+                    <select
+                      value={user.role}
+                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                      disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
+                      className="bg-cyber-dark border border-cyber-gray/30 rounded px-2 py-1 focus:border-cyber-green outline-none disabled:opacity-50"
+                    >
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="VET">VETERİNER</option>
+                      <option value="WORKER">İŞÇİ</option>
+                    </select>
+                    <button
+                      onClick={() => handleDeleteUser(user.id, user.username)}
+                      disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
+                      className="bg-red-900/50 hover:bg-red-600 text-white px-3 py-1 rounded disabled:opacity-50 transition"
+                    >
+                      Sil
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* PERMISSIONS TAB */
+        <div className="space-y-8">
+          <p className="text-cyber-gray text-sm">Alt kademedeki rollerin (Veteriner, İşçi) neyi görebileceğini ve yapabileceğini buradan ayarlayabilirsiniz. Admin rolünün tüm izinleri kalıcı olarak açıktır.</p>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {rolesData && Object.entries(rolesData).map(([roleKey, roleInfo]) => (
+              <div key={roleKey} className={`bg-cyber-dark/60 border rounded-2xl p-6 ${roleKey==='ADMIN' ? 'border-purple-500/50 shadow-lg shadow-purple-500/10 opacity-70' : 'border-cyber-green/30 shadow-lg shadow-cyber-green/10'}`}>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-white">{roleInfo.label}</h3>
+                  {roleKey !== 'ADMIN' && (
+                    <button 
+                      onClick={() => handleSavePermissions(roleKey)}
+                      disabled={savingPerms}
+                      className="bg-cyber-green/20 hover:bg-cyber-green/40 text-cyber-green border border-cyber-green/50 px-3 py-1 rounded text-sm transition"
+                    >
+                      {savingPerms ? 'Kaydediliyor...' : 'Kaydet'}
+                    </button>
+                  )}
+                </div>
+                
+                <div className="space-y-3">
+                  {Object.entries(roleInfo.permissions).map(([permKey, permVal]) => (
+                    <label key={permKey} className="flex items-center justify-between p-2 hover:bg-cyber-darkBlue/40 rounded cursor-pointer transition">
+                      <span className="text-sm text-cyber-lightGray">{permVal.label}</span>
+                      <div className="relative inline-block w-10 mr-2 align-middle select-none">
+                        <input 
+                          type="checkbox" 
+                          className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"
+                          checked={permVal.allowed}
+                          onChange={() => togglePermission(roleKey, permKey)}
+                          disabled={permVal.locked}
+                          style={{
+                                right: permVal.allowed ? '0' : '1.25rem',
+                                borderColor: permVal.allowed ? (roleKey === 'ADMIN' ? '#A855F7' : '#00ff9d') : '#4B5563',
+                          }}
+                        />
+                        <div className={`toggle-label block overflow-hidden h-5 rounded-full ${permVal.allowed ? (roleKey === 'ADMIN' ? 'bg-purple-500/30' : 'bg-cyber-green/30') : 'bg-gray-700'}`}></div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add User Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md border border-gray-700">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Yeni Kullanıcı Ekle</h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-white text-2xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
-                  Kullanıcı Adı *
-                </label>
-                <input
-                  type="text"
-                  id="username"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  required
-                />
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-cyber-dark border border-cyber-green/30 rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <h2 className="text-2xl font-bold text-white mb-6">Yeni Kullanıcı</h2>
+            <form onSubmit={handleUserSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm text-cyber-gray mb-1">Kullanıcı Adı *</label>
+                <input required type="text" className="w-full bg-cyber-darkBlue border border-cyber-gray/30 rounded-lg p-2.5 text-white outline-none focus:border-cyber-green" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
               </div>
-
-              <div className="mb-4">
-                <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                  E-posta
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+              <div>
+                <label className="block text-sm text-cyber-gray mb-1">Şifre *</label>
+                <input required type="password" className="w-full bg-cyber-darkBlue border border-cyber-gray/30 rounded-lg p-2.5 text-white outline-none focus:border-cyber-green" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
               </div>
-
-              <div className="mb-4">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                  Şifre *
-                </label>
-                <input
-                  type="password"
-                  id="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  required
-                />
-              </div>
-
-              <div className="mb-6">
-                <label htmlFor="role" className="block text-sm font-medium text-gray-300 mb-2">
-                  Rol *
-                </label>
-                <select
-                  id="role"
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  <option value="ADMIN">Admin (Patron)</option>
-                  <option value="VET">Veteriner</option>
-                  <option value="WORKER">İşçi</option>
+              <div>
+                <label className="block text-sm text-cyber-gray mb-1">Rol</label>
+                <select className="w-full bg-cyber-darkBlue border border-cyber-gray/30 rounded-lg p-2.5 text-white outline-none focus:border-cyber-green" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="VET">VETERİNER</option>
+                  <option value="WORKER">İŞÇİ</option>
                 </select>
               </div>
-
-              <div className="flex gap-4">
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={submitting}
-                >
-                  {submitting ? 'Oluşturuluyor...' : 'Oluştur'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all duration-200"
-                >
-                  İptal
-                </button>
+              <div className="flex gap-3 pt-4 border-t border-cyber-gray/20">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-cyber-gray hover:text-white flex-1">İptal</button>
+                <button type="submit" className="bg-cyber-green hover:bg-green-500 text-black font-bold px-4 py-2 rounded-lg flex-1">Kaydet</button>
               </div>
             </form>
           </div>
         </div>
       )}
+      
+      {/* Custom inline style for toggle switch transitions */}
+      <style>{`
+        .toggle-checkbox:checked { right: 0; }
+        .toggle-checkbox { right: 1.25rem; transition: right 0.2s ease-in-out, border-color 0.2s ease-in-out; }
+      `}</style>
     </div>
   );
 };

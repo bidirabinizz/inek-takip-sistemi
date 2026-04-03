@@ -48,6 +48,7 @@ export const AuthProvider = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [user, setUser] = useState(null);
     const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || null);
+    const [permissions, setPermissions] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const checkAuthStatus = useCallback(async () => {
@@ -56,7 +57,20 @@ export const AuthProvider = ({ children }) => {
             const response = await axios.get(`${API_BASE}/api/settings/`);
             if (response.status === 200) {
                 setIsAuthenticated(true);
-                // User role will be set on login via localStorage
+                // Kullanıcı rollerini ve izinlerini çek
+                try {
+                    const permsResponse = await axios.get(`${API_BASE}/api/permissions/`);
+                    if (permsResponse.data) {
+                        setPermissions(permsResponse.data.permissions || []);
+                        const role = permsResponse.data.role;
+                        if (userRole !== role) {
+                            setUserRole(role);
+                            localStorage.setItem('userRole', role);
+                        }
+                    }
+                } catch (e) {
+                    console.error("İzinler çekilemedi:", e);
+                }
             }
         } catch (error) {
             if (error.response && (error.response.status === 401 || error.response.status === 403)) {
@@ -69,6 +83,7 @@ export const AuthProvider = ({ children }) => {
                 setIsAuthenticated(false);
                 setUser(null);
                 setUserRole(null);
+                setPermissions([]);
                 localStorage.removeItem('userRole');
             }
         } finally {
@@ -94,6 +109,15 @@ export const AuthProvider = ({ children }) => {
                 const role = response.data.user.role;
                 setUserRole(role);
                 localStorage.setItem('userRole', role);
+
+                // İzinleri de hemen çek
+                try {
+                    const permsRes = await axios.get(`${API_BASE}/api/permissions/`);
+                    setPermissions(permsRes.data.permissions || []);
+                } catch (e) {
+                    console.error("Login sırasında izinler çekilemedi:", e);
+                }
+
                 return { success: true, message: response.data.message };
             }
         } catch (error) {
@@ -119,6 +143,7 @@ export const AuthProvider = ({ children }) => {
             setIsAuthenticated(false);
             setUser(null);
             setUserRole(null);
+            setPermissions([]);
             localStorage.removeItem('userRole');
         }
     };
@@ -127,6 +152,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated,
         user,
         userRole,
+        permissions,
         loading,
         login,
         logout

@@ -1,10 +1,13 @@
 from django.contrib import admin
-from .models import AccelerometerData, Device, GunlukAktivite, Animal, SystemSettings
+from .models import (
+    AccelerometerData, Device, GunlukAktivite, Animal,
+    SystemSettings, Paddock, Insemination, RolePermission
+)
 
 @admin.register(Animal)
 class AnimalAdmin(admin.ModelAdmin):
-    list_display = ('ear_tag', 'name', 'gender', 'is_active', 'created_at')
-    list_filter = ('gender', 'is_active')
+    list_display = ('ear_tag', 'name', 'gender', 'paddock', 'is_active', 'created_at')
+    list_filter = ('gender', 'is_active', 'paddock')
     search_fields = ('ear_tag', 'name')
     ordering = ('-created_at',)
 
@@ -42,3 +45,27 @@ class SystemSettingsAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+
+@admin.register(Paddock)
+class PaddockAdmin(admin.ModelAdmin):
+    list_display = ('name', 'capacity', 'is_active', 'created_at')
+    list_filter = ('is_active',)
+    search_fields = ('name',)
+    ordering = ('name',)
+
+
+@admin.register(Insemination)
+class InseminationAdmin(admin.ModelAdmin):
+    list_display = ('animal', 'insemination_date', 'status', 'technician', 'expected_calving_date')
+    list_filter = ('status', 'insemination_date')
+    search_fields = ('animal__ear_tag', 'animal__name', 'technician', 'bull_info')
+    ordering = ('-insemination_date',)
+    date_hierarchy = 'insemination_date'
+
+
+@admin.register(RolePermission)
+class RolePermissionAdmin(admin.ModelAdmin):
+    list_display = ('role', 'permission_key', 'is_allowed')
+    list_filter = ('role', 'is_allowed')
+    search_fields = ('permission_key',)
+    ordering = ('role', 'permission_key')

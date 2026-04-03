@@ -1,10 +1,12 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePermission } from '../hooks/usePermission';
 
-const ProtectedRoute = ({ children, requiredRole }) => {
-  const { isAuthenticated, userRole, loading } = useAuth();
+const ProtectedRoute = ({ children, requiredPermission }) => {
+  const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
+  const hasPermission = usePermission(requiredPermission);
 
   if (loading) {
     return (
@@ -15,10 +17,10 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredRole && userRole !== requiredRole) {
+  if (requiredPermission && !hasPermission) {
     return <Navigate to="/" replace />;
   }
 

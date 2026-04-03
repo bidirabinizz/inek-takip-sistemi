@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { API_BASE } from '../config';
+import { getCookie } from '../utils/cookieUtils';
 
 const AppContext = createContext();
 
@@ -36,20 +37,7 @@ export const AppProvider = ({ children }) => {
   });
   const [settingsLoading, setSettingsLoading] = useState(false);
 
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
-  }
+
 
   // Theme sync localStorage
   useEffect(() => {

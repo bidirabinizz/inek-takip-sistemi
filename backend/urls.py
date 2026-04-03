@@ -29,5 +29,25 @@ urlpatterns = [
        path('api/users/create/',      views.user_create, name='user_create'),
        path('api/users/<int:id>/',    views.user_detail, name='user_detail'),
        path('api/users/<int:id>/role/', views.user_update_role, name='user_update_role'),
-       path('api/dashboard-summary/', views.dashboard_summary, name='dashboard_summary'),
-   ]
+    path('api/dashboard-summary/', views.dashboard_summary, name='dashboard_summary'),
+    
+    # ─────────────────────────────────────────────
+    #  YENİ EKLENEN ROTALAR
+    # ─────────────────────────────────────────────
+    # Permissions
+    path('api/permissions/', views.get_my_permissions, name='get_my_permissions'),
+    path('api/permissions/all/', views.get_all_permissions, name='get_all_permissions'),
+    path('api/permissions/update/', views.update_permissions, name='update_permissions'),
+    
+    # Paddocks
+    path('api/paddocks/', views.paddock_list, name='paddock_list'),
+    path('api/paddocks/create/', views.paddock_create, name='paddock_create'),
+    path('api/paddocks/<int:id>/', views.paddock_detail, name='paddock_detail'),
+    
+    # Inseminations / Breeding
+    path('api/inseminations/', views.insemination_list, name='insemination_list'),
+    path('api/inseminations/create/', views.insemination_create, name='insemination_create'),
+    path('api/inseminations/<int:id>/', views.insemination_detail, name='insemination_detail'),
+    path('api/inseminations/<int:id>/status/', views.insemination_update_status, name='insemination_update_status'),
+    path('api/animals/<int:id>/breeding-history/', views.animal_breeding_history, name='animal_breeding_history'),
+]

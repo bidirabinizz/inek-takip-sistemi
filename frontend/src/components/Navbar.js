@@ -7,29 +7,26 @@ import { useAuth } from '../context/AuthContext';
 // DİKKAT: activeTab ve setActiveTab kısımlarını sildik, artık onlara gerek yok!
 const Navbar = () => {
   const { theme, toggleTheme, notifications, addNotification, searchQuery, setSearchQuery } = useAppContext();
-  const { isAuthenticated, logout, userRole } = useAuth();
+  const { isAuthenticated, logout, userRole, permissions } = useAuth();
   const navigate = useNavigate(); 
   const location = useLocation();
   
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // 🚀 URL yönlendirmeleri için "path" özelliğini ekledik
-  const baseTabs = [
-    { id: 'dashboard', path: '/', label: '📊 Canlı Takip', icon: '📊' },
-    { id: 'devices', path: '/devices', label: '📡 Cihazlar', icon: '📡' },
-    { id: 'animals', path: '/animals', label: '🐄 Hayvanlar', icon: '🐄' },
+  // Tanımlı tüm sekmeler ve onlara erişmek için gereken permission key'ler
+  const allTabs = [
+    { id: 'dashboard', path: '/', label: '📊 Canlı Takip', icon: '📊', perm: 'view_dashboard' },
+    { id: 'devices', path: '/devices', label: '📡 Cihazlar', icon: '📡', perm: 'view_devices' },
+    { id: 'animals', path: '/animals', label: '🐄 Hayvanlar', icon: '🐄', perm: 'view_animals' },
+    { id: 'paddocks', path: '/paddocks', label: '🏠 Padoklar', icon: '🏠', perm: 'view_paddocks' },
+    { id: 'breeding', path: '/breeding', label: '🧬 Dölleme', icon: '🧬', perm: 'view_breeding' },
+    { id: 'settings', path: '/settings', label: '⚙️ Ayarlar', icon: '⚙️', perm: 'manage_settings' },
+    { id: 'users', path: '/users', label: '👥 Kullanıcılar', icon: '👥', perm: 'manage_users' },
   ];
   
-  // ADMIN kullanıcılara özel tablar
-  const adminTabs = [
-    { id: 'settings', path: '/settings', label: '⚙️ Ayarlar', icon: '⚙️' },
-    { id: 'users', path: '/users', label: '👥 Kullanıcılar', icon: '👥' },
-  ];
-  
-  // Kullanıcı rolüne göre tabları filtrele
-  const tabs = userRole === 'ADMIN'
-    ? [...baseTabs, ...adminTabs]
-    : baseTabs.filter(tab => tab.id !== 'settings');
+  // Kullanıcının yetkisi olan sekmeleri filtrele
+  const hasPermission = (perm) => userRole === 'ADMIN' || (permissions && permissions.includes(perm));
+  const tabs = allTabs.filter(tab => hasPermission(tab.perm));
 
   const toggleMobileMenu = () => setMobileOpen(!mobileOpen);
 

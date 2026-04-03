@@ -3,25 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE } from '../config';
 import { useNavigate } from 'react-router-dom';
 
-function getCookie(name) {
-  let cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-      const cookie = cookies[i].trim();
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
-    }
-  }
-  return cookieValue;
-}
+import { getCookie } from '../utils/cookieUtils';
 
 const Animals = () => {
   const { isAuthenticated, userRole } = useAuth();
   const navigate = useNavigate();
   const [animals, setAnimals] = useState([]);
+  const [paddocks, setPaddocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -30,7 +18,7 @@ const Animals = () => {
     birth_date: '',
     gender: 'Female',
     is_active: true,
-    paddock: '',
+    paddock_id: '',
   });
   const [message, setMessage] = useState({ type: '', text: '' });
   const [submitting, setSubmitting] = useState(false);
@@ -43,7 +31,20 @@ const Animals = () => {
       return;
     }
     fetchAnimals();
+    fetchPaddocks();
   }, [isAuthenticated, navigate]);
+
+  const fetchPaddocks = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/paddocks/`, { credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setPaddocks(data);
+      }
+    } catch (error) {
+      console.error('Padoklar çekilemedi:', error);
+    }
+  };
 
   const fetchAnimals = async () => {
     try {
@@ -76,8 +77,8 @@ const Animals = () => {
     const payload = {
       ...formData,
       birth_date: formData.birth_date === '' ? null : formData.birth_date,
-      // paddock'u boşsa null yap
-      paddock: formData.paddock === '' ? null : formData.paddock
+      // paddock_id'yi boşsa null yap
+      paddock_id: formData.paddock_id === '' ? null : parseInt(formData.paddock_id)
     };
 
     try {
@@ -102,7 +103,7 @@ const Animals = () => {
             birth_date: '',
             gender: 'Female',
             is_active: true,
-            paddock: '',
+            paddock_id: '',
           });
           setIsEditing(false);
           setCurrentAnimalId(null);
@@ -132,7 +133,7 @@ const Animals = () => {
             birth_date: '',
             gender: 'Female',
             is_active: true,
-            paddock: '',
+            paddock_id: '',
           });
           setShowModal(false);
           fetchAnimals();
@@ -177,7 +178,7 @@ const Animals = () => {
       birth_date: animal.birth_date || '',
       gender: animal.gender,
       is_active: animal.is_active,
-      paddock: animal.paddock || '',
+      paddock_id: animal.paddock_id || '',
     });
     setCurrentAnimalId(animal.id);
     setIsEditing(true);
@@ -391,17 +392,22 @@ const Animals = () => {
               </div>
 
               <div className="mb-4">
-                <label htmlFor="paddock" className="block text-sm font-medium text-gray-300 mb-2">
+                <label htmlFor="paddock_id" className="block text-sm font-medium text-gray-300 mb-2">
                   Padok
                 </label>
-                <input
-                  type="text"
-                  id="paddock"
-                  value={formData.paddock}
-                  onChange={(e) => setFormData({ ...formData, paddock: e.target.value })}
+                <select
+                  id="paddock_id"
+                  value={formData.paddock_id}
+                  onChange={(e) => setFormData({ ...formData, paddock_id: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Örn: Padok A"
-                />
+                >
+                  <option value="">Atanmamış (Bağımsız)</option>
+                  {paddocks.map((padok) => (
+                    <option key={padok.id} value={padok.id}>
+                      {padok.name} (Kapasite: {padok.capacity || 'Sınırsız'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="mb-6">
