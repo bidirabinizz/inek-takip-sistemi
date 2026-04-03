@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine
+  Tooltip, ResponsiveContainer, ReferenceLine,
+  BarChart, Bar
 } from "recharts";
 import { API_BASE } from '../config';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -104,27 +105,25 @@ const DeviceReport = () => {
   const [kizginlikLoading, setKizginlikLoading] = useState(false);
   const [deviceData, setDeviceData] = useState(null);
 
-  // ── Geçmiş Veri Çek ─────────────────────────
+  // ── Geçmiş Veri Çek (Yeni API: Günlük Agrega) ──
   const fetchHistory = useCallback(() => {
     setHistoryLoading(true);
-    const url = `${API_BASE}/api/cihaz-gecmisi/?mac=${mac}&start=${startDate}:00Z&end=${endDate}:00Z`;
+    const url = `${API_BASE}/api/device-history-range/?mac=${mac}&start_date=${startDate}&end_date=${endDate}`;
 
     fetch(url, {
       credentials: 'include'
     })
       .then(res => res.json())
       .then(data => {
-        setHistoryData(data);
-
-        // Gerçek ortalama hesapla
-        if (data.length > 0) {
-          const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+        setHistoryData(data.data || []);
+        
+        // Ortalamaları API'den al
+        if (data.ortalama_adim !== undefined) {
           setAverages({
-            x:   avg(data.map(d => d.x)).toFixed(3),
-            y:   avg(data.map(d => d.y)).toFixed(3),
-            z:   avg(data.map(d => d.z)).toFixed(3),
-            mag: avg(data.map(d => d.mag)).toFixed(3),
-            count: data.length,
+            toplam_adim: data.ortalama_adim,
+            yatma_suresi: data.ortalama_yatma_suresi,
+            kizginlik_skoru: data.ortalama_kizginlik_skoru,
+            toplam_gun: data.toplam_gun,
           });
         } else {
           setAverages(null);
@@ -133,7 +132,7 @@ const DeviceReport = () => {
         setHistoryLoading(false);
       })
       .catch(err => {
-        console.error("Geçmiş çekilemedi:", err);
+        console.error("Geçmiş veriler çekilemedi:", err);
         setHistoryLoading(false);
       });
   }, [mac, startDate, endDate]);
@@ -367,26 +366,28 @@ const DeviceReport = () => {
           TARİHSEL İVME ANALİZİ
         </div>
 
-        {/* Filtreleme çubuğu */}
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-end", marginBottom: 20, flexWrap: "wrap" }}>
+        {/* Filtreleme çubuğu - Mobil uyumlu */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", marginBottom: 20 }}>
           {[
             { label: "BAŞLANGIÇ", value: startDate, setter: setStartDate },
             { label: "BİTİŞ",     value: endDate,   setter: setEndDate   },
           ].map(f => (
-            <div key={f.label}>
+            <div key={f.label} style={{ flex: "1 1 140px" }}>
               <div style={{ fontSize: 10, color: "#8899aa", letterSpacing: 2, marginBottom: 6 }}>
                 {f.label}
               </div>
               <input
-                type="datetime-local"
+                type="date"
                 value={f.value}
                 onChange={e => f.setter(e.target.value)}
                 style={{
+                  width: "100%",
                   background: "#0f172a",
                   border: "1px solid #334155",
                   color: "#fff", padding: "8px 10px",
                   borderRadius: 6, fontSize: 13,
                   fontFamily: "inherit", outline: "none",
+                  boxSizing: "border-box",
                 }}
               />
             </div>
@@ -401,6 +402,7 @@ const DeviceReport = () => {
               fontSize: 13, fontFamily: "inherit",
               fontWeight: 700, letterSpacing: 1,
               transition: "background 0.2s",
+              flex: "0 0 auto",
             }}
             onMouseOver={e => e.currentTarget.style.background = "rgba(167,139,250,0.25)"}
             onMouseOut={e => e.currentTarget.style.background = "rgba(167,139,250,0.15)"}
@@ -410,30 +412,62 @@ const DeviceReport = () => {
 
           {averages && (
             <div style={{ marginLeft: "auto", fontSize: 12, color: "#8899aa" }}>
-              {averages.count} kayıt
+              {averages.toplam_gun} gün
             </div>
           )}
         </div>
 
-        {/* Grafik */}
+        {/* Grafikler - Mobil uyumlu */}
         {historyLoading ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#a78bfa" }}>
             Veriler getiriliyor...
           </div>
         ) : historyData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={historyData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="timeLabel" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} />
-              <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} />
-              <Tooltip content={<HistoryTooltip />} />
-              <Line type="monotone" dataKey="mag" stroke="#a78bfa" strokeWidth={2}   dot={false} isAnimationActive={false} name="Mag" />
-              <Line type="monotone" dataKey="z"   stroke="#38bdf8" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Z"   />
-            </LineChart>
-          </ResponsiveContainer>
+          <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* Günlük Adım Grafiği (BarChart) */}
+            <div>
+              <div style={{ fontSize: 12, color: "#00ffb4", marginBottom: 8, fontWeight: 600 }}>
+                📊 Günlük Toplam Adım
+              </div>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={historyData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="tarih" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: "rgba(10,10,20,0.95)", border: "1px solid rgba(0,255,180,0.3)", borderRadius: 8, color: "#e0e0e0" }}
+                    labelStyle={{ color: "#00ffb4", fontWeight: 700 }}
+                  />
+                  <Bar dataKey="toplam_adim" fill="#00ffb4" name="Toplam Adım" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Yatma Süresi ve Kızgınlık Skoru (LineChart) */}
+            <div>
+              <div style={{ fontSize: 12, color: "#818cf8", marginBottom: 8, fontWeight: 600 }}>
+                📈 Yatma Süresi ve Kızgınlık Skoru
+              </div>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={historyData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="tarih" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: "rgba(10,10,20,0.95)", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 8, color: "#e0e0e0" }}
+                    labelStyle={{ color: "#818cf8", fontWeight: 700 }}
+                  />
+                  <ReferenceLine yAxisId="right" y={60} stroke="#f87171" strokeDasharray="4 4" strokeOpacity={0.6} label={{ value: "ALARM", fontSize: 10, fill: "#f87171" }} />
+                  <Line yAxisId="left" type="monotone" dataKey="yatma_suresi_dk" stroke="#818cf8" strokeWidth={2} dot={false} isAnimationActive={false} name="Yatma (dk)" />
+                  <Line yAxisId="right" type="monotone" dataKey="kizginlik_skoru" stroke="#f87171" strokeWidth={2} dot={false} isAnimationActive={false} name="Kızgınlık Skoru" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         ) : (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#8899aa" }}>
-            Bu tarih aralığında sensör verisi bulunamadı.
+            Bu tarih aralığında günlük aktivite verisi bulunamadı.
           </div>
         )}
       </div>
@@ -451,13 +485,12 @@ const DeviceReport = () => {
         </div>
 
         {averages ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <AvgCard label="X Ekseni"  value={averages.x}   unit="m/s²" borderColor="rgba(248,113,113,0.4)" />
-            <AvgCard label="Y Ekseni"  value={averages.y}   unit="m/s²" borderColor="rgba(52,211,153,0.4)"  />
-            <AvgCard label="Z Ekseni"  value={averages.z}   unit="m/s²" borderColor="rgba(56,189,248,0.4)"  />
-            <AvgCard label="Magnitude" value={averages.mag} unit="m/s²" borderColor="rgba(167,139,250,0.4)" />
-            <div style={{ fontSize: 11, color: "#8899aa", marginTop: 4 }}>
-              {averages.count} ölçüm üzerinden hesaplandı
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            <AvgCard label="Ort. Günlük Adım"  value={averages.toplam_adim?.toFixed(0) || 0}   unit="adım" borderColor="rgba(0,255,180,0.4)" />
+            <AvgCard label="Ort. Yatma Süresi"  value={averages.yatma_suresi?.toFixed(0) || 0}   unit="dk" borderColor="rgba(129,140,248,0.4)"  />
+            <AvgCard label="Ort. Kızgınlık Skoru"  value={averages.kizginlik_skoru?.toFixed(1) || 0}   unit="puan" borderColor="rgba(248,113,113,0.4)"  />
+            <div style={{ fontSize: 11, color: "#8899aa", marginTop: 4, gridColumn: "1 / -1" }}>
+              {averages.toplam_gun} gün üzerinden hesaplandı
             </div>
           </div>
         ) : (

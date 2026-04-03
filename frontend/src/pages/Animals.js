@@ -53,7 +53,8 @@ const Animals = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        setAnimals(data);
+        // Sayfalama yapısını işle (response.data.results)
+        setAnimals(data.results || data);
       } else {
         setMessage({ type: 'error', text: 'Hayvanlar yüklenemedi' });
       }
@@ -213,18 +214,18 @@ const Animals = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
-          <div className="flex justify-between items-center mb-8">
+        <div className="bg-gray-800 rounded-2xl shadow-2xl p-4 md:p-8 border border-gray-700">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Hayvan Yönetimi</h1>
-              <p className="text-gray-400">Küpe numaraları ve hayvan bilgileri</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Hayvan Yönetimi</h1>
+              <p className="text-gray-400 text-sm md:text-base">Küpe numaraları ve hayvan bilgileri</p>
             </div>
             {userRole !== 'WORKER' && (
               <button
                 onClick={() => setShowModal(true)}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200"
+                className="w-full md:w-auto px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200"
               >
                 + Yeni Hayvan Ekle
               </button>
@@ -237,82 +238,84 @@ const Animals = () => {
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Küpe No</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">İsim</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Doğum Tarihi</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Cinsiyet</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Padok</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Durum</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">Atanmış Cihaz</th>
-                  <th className="py-4 px-4 text-gray-300 font-semibold">İşlemler</th>
-                </tr>
-              </thead>
-              <tbody>
-                {animals.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="py-8 text-center text-gray-400">
-                      Henüz hayvan eklenmemiş
-                    </td>
+          <div className="overflow-x-auto -mx-4 md:mx-0">
+            <div className="min-w-full">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Küpe No</th>
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">İsim</th>
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Doğum Tarihi</th>
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Cinsiyet</th>
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Padok</th>
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Durum</th>
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Atanmış Cihaz</th>
+                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">İşlemler</th>
                   </tr>
-                ) : (
-                  animals.map((animal) => (
-                    <tr key={animal.id} className="border-b border-gray-700 hover:bg-gray-700/30 transition-colors">
-                      <td className="py-4 px-4 text-white font-mono">{animal.ear_tag}</td>
-                      <td className="py-4 px-4 text-gray-300">{animal.name || '-'}</td>
-                      <td className="py-4 px-4 text-gray-300">{animal.birth_date || '-'}</td>
-                      <td className="py-4 px-4 text-gray-300">{animal.gender}</td>
-                      <td className="py-4 px-4 text-gray-300">{animal.paddock || '-'}</td>
-                      <td className="py-4 px-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${animal.is_active ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
-                          {animal.is_active ? 'Aktif' : 'Pasif'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-gray-300 font-mono">{animal.device || '-'}</td>
-                      <td className="py-4 px-4">
-                        {userRole !== 'WORKER' ? (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleEdit(animal)}
-                              className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded transition-colors"
-                            >
-                              Düzenle
-                            </button>
-                            <button
-                              onClick={() => handleToggleActive(animal.id, animal.is_active)}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
-                            >
-                              {animal.is_active ? 'Pasif Yap' : 'Aktif Yap'}
-                            </button>
-                            <button
-                              onClick={() => handleDelete(animal.id)}
-                              className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
-                            >
-                              Sil
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-gray-500 text-sm">-</span>
-                        )}
-                        {animal.device && (
-                          <div className="mt-2">
-                            <button
-                              onClick={() => navigate(`/report/${animal.device}`)}
-                              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors"
-                            >
-                              Detaylı Rapor
-                            </button>
-                          </div>
-                        )}
+                </thead>
+                <tbody>
+                  {animals.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="py-8 text-center text-gray-400">
+                        Henüz hayvan eklenmemiş
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    animals.map((animal) => (
+                      <tr key={animal.id} className="border-b border-gray-700 hover:bg-gray-700/30 transition-colors">
+                        <td className="py-3 px-2 md:py-4 md:px-4 text-white font-mono text-xs md:text-sm whitespace-nowrap">{animal.ear_tag}</td>
+                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.name || '-'}</td>
+                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.birth_date || '-'}</td>
+                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.gender}</td>
+                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.paddock || '-'}</td>
+                        <td className="py-3 px-2 md:py-4 md:px-4 whitespace-nowrap">
+                          <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-xs font-semibold ${animal.is_active ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
+                            {animal.is_active ? 'Aktif' : 'Pasif'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-mono text-xs md:text-sm whitespace-nowrap">{animal.device || '-'}</td>
+                        <td className="py-3 px-2 md:py-4 md:px-4 whitespace-nowrap">
+                          {userRole !== 'WORKER' ? (
+                            <div className="flex flex-col md:flex-row gap-1 md:gap-2">
+                              <button
+                                onClick={() => handleEdit(animal)}
+                                className="px-2 py-1 md:px-3 md:py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                              >
+                                Düzenle
+                              </button>
+                              <button
+                                onClick={() => handleToggleActive(animal.id, animal.is_active)}
+                                className="px-2 py-1 md:px-3 md:py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                              >
+                                {animal.is_active ? 'Pasif Yap' : 'Aktif Yap'}
+                              </button>
+                              <button
+                                onClick={() => handleDelete(animal.id)}
+                                className="px-2 py-1 md:px-3 md:py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                              >
+                                Sil
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 text-sm">-</span>
+                          )}
+                          {animal.device && (
+                            <div className="mt-2">
+                              <button
+                                onClick={() => navigate(`/report/${animal.device}`)}
+                                className="px-2 py-1 md:px-3 md:py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                              >
+                                Detaylı Rapor
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

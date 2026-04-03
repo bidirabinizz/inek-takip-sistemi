@@ -50,4 +50,10 @@ urlpatterns = [
     path('api/inseminations/<int:id>/', views.insemination_detail, name='insemination_detail'),
     path('api/inseminations/<int:id>/status/', views.insemination_update_status, name='insemination_update_status'),
     path('api/animals/<int:id>/breeding-history/', views.animal_breeding_history, name='animal_breeding_history'),
+    
+    # ─────────────────────────────────────────────
+    #  FAZ 3: TARİHSEL VERİ VE PADOK ANALİTİK
+    # ─────────────────────────────────────────────
+    path('api/device-history-range/', views.device_history_range, name='device_history_range'),
+    path('api/paddock-analytics/', views.paddock_analytics, name='paddock_analytics'),
 ]

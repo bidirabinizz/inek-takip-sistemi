@@ -27,7 +27,8 @@ const DevicesView = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        setDevices(data);
+        // Sayfalama yapısını işle (response.data.results)
+        setDevices(data.results || data);
       }
     } catch (err) {
       console.error("Cihazlar çekilemedi", err);
@@ -43,7 +44,8 @@ const DevicesView = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        setAnimals(data);
+        // Sayfalama yapısını işle (response.data.results)
+        setAnimals(data.results || data);
       }
     } catch (err) {
       console.error("Hayvanlar çekilemedi", err);
@@ -123,10 +125,10 @@ const DevicesView = () => {
   }
 
   return (
-    <div className="px-9 py-6">
-      <h2 className="text-cyber-purple font-light mb-5">Kayıtlı Cihazlar (Filo Durumu)</h2>
+    <div className="px-4 md:px-9 py-4 md:py-6">
+      <h2 className="text-cyber-purple font-light mb-4 md:mb-5 text-lg md:text-xl">Kayıtlı Cihazlar (Filo Durumu)</h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         {devices
           .filter(dev => 
             dev.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||

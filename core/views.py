@@ -1,17 +1,22 @@
 from functools import wraps
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from .models import (
     AccelerometerData, Device, GunlukAktivite, SystemSettings,
     Animal, UserProfile, Paddock, Insemination,
     RolePermission, ALL_PERMISSIONS
 )
 from django.contrib.auth.models import User
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Prefetch
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime, parse_date
 from django.utils.timezone import make_aware, is_naive, localtime
 from datetime import date, timedelta
+import math
+from .activity_processor import classifyActivityRaw
 
 
 # ─────────────────────────────────────────────
@@ -45,20 +50,101 @@ def require_permission(permission_key):
 # ─────────────────────────────────────────────
 #  SENSÖR API
 # ─────────────────────────────────────────────
+def _process_sensor_data(mac, x, y, z, created_time, rssi=None):
+    """
+    Sensör verisini işler:
+    - Aktivite sınıflandırması yapar
+    - Adım sayısını hesaplar
+    - Device.total_steps günceller
+    - GunlukAktivite kaydını günceller
+    """
+    settings = SystemSettings.get_instance()
+    mag = math.sqrt(x**2 + y**2 + z**2)
+    
+    # Aktivite sınıflandırması
+    activity_type, steps, excited_count = classifyActivityRaw(x, y, z, mag, settings)
+    
+    # Cihaz kayıt/güncelleme
+    device, _ = Device.objects.get_or_create(mac_address=mac, defaults={'name': f"İnek-{mac[:8].upper()}"})
+    device.total_steps += steps
+    device.last_seen = created_time
+    device.save()
+    
+    # Günlük aktivite güncelleme
+    bugun = created_time.date() if hasattr(created_time, 'date') else date.today()
+    saat = created_time.hour if hasattr(created_time, 'hour') else timezone.now().hour
+    gece_mi = saat >= settings.LYING_NIGHT_START or saat < settings.LYING_NIGHT_END
+    
+    kayit, _ = GunlukAktivite.objects.get_or_create(mac=mac, tarih=bugun)
+    kayit.toplam_adim += steps
+    kayit.excited_count += excited_count
+    if gece_mi:
+        kayit.gece_adim += steps
+    
+    # STILL kronometresi
+    if activity_type == "STILL":
+        if not kayit.still_start_time:
+            kayit.still_start_time = created_time
+    else:
+        if kayit.still_start_time:
+            kayit.still_start_time = None
+            
+        if kayit.lying_start_time:
+            elapsed = int((created_time - kayit.lying_start_time).total_seconds() / 60)
+            kayit.yatma_suresi_dk += elapsed
+            kayit.lying_start_time = None
+    
+    # LYING yönetimi
+    still_mins = 0
+    if kayit.still_start_time:
+        still_mins = int((created_time - kayit.still_start_time).total_seconds() / 60)
+    
+    is_lying = gece_mi or (activity_type == "STILL" and still_mins >= settings.LYING_STILL_MIN_MINUTES)
+    
+    if is_lying:
+        if not kayit.lying_start_time:
+            kayit.lying_start_time = kayit.still_start_time or created_time
+    else:
+        if kayit.lying_start_time:
+            elapsed = int((created_time - kayit.lying_start_time).total_seconds() / 60)
+            kayit.yatma_suresi_dk += elapsed
+            kayit.lying_start_time = None
+    
+    # Final aktivite kararı
+    if activity_type == "EXCITED":
+        final_activity = "EXCITED"
+    elif activity_type == "WALKING":
+        final_activity = "WALKING"
+    elif is_lying:
+        final_activity = "LYING"
+    elif activity_type == "STILL":
+        final_activity = "STANDING"
+    else:
+        final_activity = "UNKNOWN"
+    
+    kayit.last_activity = final_activity
+    kayit.last_activity_time = created_time
+    kayit.kizginlik_skoru = hesapla_kizginlik_skoru(mac, bugun)
+    kayit.kizginlik_alarm = kayit.kizginlik_skoru >= 60
+    kayit.save()
+    
+    return steps, excited_count, final_activity
+
+
 @api_view(['POST', 'GET'])
 def sensor_api(request):
     if request.method == 'POST':
         data = request.data
 
-        def sync_device(mac):
-            if mac:
-                Device.objects.get_or_create(mac_address=mac, defaults={'name': f"İnek-{mac[:8].upper()}"})
-
         if isinstance(data, list):
             if len(data) > 0:
-                sync_device(data[0].get('mac'))
+                mac = data[0].get('mac')
+                if mac:
+                    Device.objects.get_or_create(mac_address=mac, defaults={'name': f"İnek-{mac[:8].upper()}"})
             
             records = []
+            total_steps = 0
+            total_excited = 0
             for item in data:
                 zaman_str = item.get('zaman')
                 created_time = timezone.now()
@@ -70,20 +156,57 @@ def sensor_api(request):
                             parsed_time = make_aware(parsed_time)
                         created_time = parsed_time
 
+                mac = item.get('mac', 'BİLİNMEYEN_CİHAZ')
+                x = item.get('x', 0.0)
+                y = item.get('y', 0.0)
+                z = item.get('z', 0.0)
+                rssi = item.get('rssi')
+                
+                # Aktivite işleme
+                steps, excited, activity = _process_sensor_data(mac, x, y, z, created_time, rssi)
+                total_steps += steps
+                total_excited += excited
+                
                 records.append(
                     AccelerometerData(
-                        device_mac=item.get('mac', 'BİLİNMEYEN_CİHAZ'),
-                        x=item.get('x'), y=item.get('y'), z=item.get('z'),
-                        signal_strength=item.get('rssi'),
-                        created_at=created_time 
+                        device_mac=mac,
+                        x=x, y=y, z=z,
+                        signal_strength=rssi,
+                        created_at=created_time
                     )
                 )
             
             AccelerometerData.objects.bulk_create(records)
-            return Response({"status": "success", "count": len(records)}, status=201)
+            print(f"[Sensör API] {len(records)} kayıt işlendi. Toplam adım: {total_steps}, Excited: {total_excited}")
+            
+            # WebSocket broadcast gönder - her bir kayıt için ayrı mesaj veya toplu mesaj
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                # Son kaydı gönder (en yeni veri)
+                if records:
+                    last_record = records[-1]
+                    async_to_sync(channel_layer.group_send)(
+                        'sensor_data',
+                        {
+                            'type': 'sensor_data_update',
+                            'data': {
+                                'mac': last_record.device_mac,
+                                'x': float(last_record.x),
+                                'y': float(last_record.y),
+                                'z': float(last_record.z),
+                                'time': last_record.created_at.isoformat(),
+                                'total_steps': total_steps,
+                                'activity': activity if 'activity' in locals() else None
+                            }
+                        }
+                    )
+            
+            return Response({"status": "success", "count": len(records), "steps": total_steps}, status=201)
             
         else:
-            sync_device(data.get('mac'))
+            mac = data.get('mac')
+            if mac:
+                Device.objects.get_or_create(mac_address=mac, defaults={'name': f"İnek-{mac[:8].upper()}"})
             
             zaman_str = data.get('zaman')
             created_time = timezone.now()
@@ -94,13 +217,43 @@ def sensor_api(request):
                         parsed_time = make_aware(parsed_time)
                     created_time = parsed_time
 
+            x = data.get('x', 0.0)
+            y = data.get('y', 0.0)
+            z = data.get('z', 0.0)
+            rssi = data.get('rssi')
+            
+            # Aktivite işleme
+            steps, excited, activity = _process_sensor_data(mac or 'BİLİNMEYEN_CİHAZ', x, y, z, created_time, rssi)
+            
             AccelerometerData.objects.create(
-                device_mac=data.get('mac', 'BİLİNMEYEN_CİHAZ'),
-                x=data.get('x'), y=data.get('y'), z=data.get('z'),
-                signal_strength=data.get('rssi'),
-                created_at=created_time 
+                device_mac=mac or 'BİLİNMEYEN_CİHAZ',
+                x=x, y=y, z=z,
+                signal_strength=rssi,
+                created_at=created_time
             )
-            return Response({"status": "success"}, status=201)
+            print(f"[Sensör API] Tekil kayıt işlendi. Adım: {steps}, Aktivite: {activity}")
+            
+            # WebSocket broadcast gönder
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    'sensor_data',
+                    {
+                        'type': 'sensor_data_update',
+                        'data': {
+                            'mac': mac or 'BİLİNMEYEN_CİHAZ',
+                            'x': float(x),
+                            'y': float(y),
+                            'z': float(z),
+                            'time': created_time.isoformat(),
+                            'steps': steps,
+                            'activity': activity,
+                            'excited': excited
+                        }
+                    }
+                )
+            
+            return Response({"status": "success", "steps": steps, "activity": activity}, status=201)
 
     if request.method == 'GET':
         data = AccelerometerData.objects.all().order_by('-created_at')[:600]
@@ -115,11 +268,20 @@ def sensor_api(request):
 # ─────────────────────────────────────────────
 #  CİHAZ LİSTESİ
 # ─────────────────────────────────────────────
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 @api_view(['GET'])
 def get_devices(request):
     devices = Device.objects.all().order_by('-last_seen')
+    paginator = StandardResultsSetPagination()
+    paginated_devices = paginator.paginate_queryset(devices, request)
+    
     res = []
-    for d in devices:
+    for d in paginated_devices:
         device_data = {
             "mac": d.mac_address,
             "name": d.name,
@@ -139,7 +301,148 @@ def get_devices(request):
         else:
             device_data["animal"] = None
         res.append(device_data)
-    return Response(res)
+    return paginator.get_paginated_response(res)
+
+
+# ─────────────────────────────────────────────
+#  CİHAZ GEÇMİŞ VERİSİ (TARİH ARALIĞI)
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+def device_history_range(request):
+    """
+    Belirli bir tarih aralığında cihazın günlük aktivite verilerini döndürür.
+    Parametreler: mac, start_date, end_date
+    """
+    mac = request.GET.get('mac')
+    start_date_str = request.GET.get('start_date')
+    end_date_str = request.GET.get('end_date')
+    
+    if not mac:
+        return Response({"error": "mac parametresi gerekli"}, status=400)
+    
+    if not start_date_str or not end_date_str:
+        return Response({"error": "start_date ve end_date parametreleri gerekli"}, status=400)
+    
+    try:
+        start_date = parse_date(start_date_str)
+        end_date = parse_date(end_date_str)
+        
+        if not start_date or not end_date:
+            return Response({"error": "Geçersiz tarih formatı. YYYY-MM-DD kullanın"}, status=400)
+    except Exception:
+        return Response({"error": "Tarih işleme hatası"}, status=400)
+    
+    # GunlukAktivite kayıtlarını getir
+    kayitlar = GunlukAktivite.objects.filter(
+        mac=mac,
+        tarih__gte=start_date,
+        tarih__lte=end_date
+    ).order_by('tarih')
+    
+    if not kayitlar.exists():
+        return Response({
+            "mac": mac,
+            "start_date": start_date_str,
+            "end_date": end_date_str,
+            "data": [],
+            "message": "Bu tarih aralığında veri bulunamadı"
+        })
+    
+    data = []
+    for k in kayitlar:
+        data.append({
+            'tarih': str(k.tarih),
+            'toplam_adim': k.toplam_adim,
+            'gece_adim': k.gece_adim,
+            'excited_count': k.excited_count,
+            'yatma_suresi_dk': k.yatma_suresi_dk,
+            'kizginlik_skoru': k.kizginlik_skoru,
+            'kizginlik_alarm': k.kizginlik_alarm,
+            'last_activity': k.last_activity,
+        })
+    
+    # Ortalamalar
+    toplam_gun = len(data)
+    ortalama_adim = sum(d['toplam_adim'] for d in data) / toplam_gun if toplam_gun > 0 else 0
+    ortalama_yatma = sum(d['yatma_suresi_dk'] for d in data) / toplam_gun if toplam_gun > 0 else 0
+    ortalama_skor = sum(d['kizginlik_skoru'] for d in data) / toplam_gun if toplam_gun > 0 else 0
+    
+    return Response({
+        "mac": mac,
+        "start_date": start_date_str,
+        "end_date": end_date_str,
+        "data": data,
+        "ortalama_adim": round(ortalama_adim, 1),
+        "ortalama_yatma_suresi": round(ortalama_yatma, 1),
+        "ortalama_kizginlik_skoru": round(ortalama_skor, 1),
+        "toplam_gun": toplam_gun,
+    })
+
+
+# ─────────────────────────────────────────────
+#  PADOK ANALİTİĞİ
+# ─────────────────────────────────────────────
+@api_view(['GET'])
+def paddock_analytics(request):
+    """
+    Her padok için bugünkü ortalama aktivite istatistiklerini döndürür.
+    - Padok başına ortalama adım sayısı
+    - Padok başına ortalama kızgınlık skoru
+    - Padok başına alarm sayısı
+    - Hayvan sayısı
+    """
+    bugun = date.today()
+    
+    # Tüm padokları al
+    paddocks = Paddock.objects.all()
+    
+    result = []
+    for paddock in paddocks:
+        # Padoktaki aktif hayvanları say
+        hayvan_sayisi = Animal.objects.filter(paddock=paddock, is_active=True).count()
+        
+        if hayvan_sayisi == 0:
+            continue
+        
+        # Padoktaki hayvanların MAC adreslerini al (cihaz üzerinden)
+        device_macs = Device.objects.filter(animal__paddock=paddock, animal__is_active=True).values_list('mac_address', flat=True)
+        
+        # Padoktaki hayvanların bugünkü aktivitelerini topla
+        gunluk_aktiviteler = GunlukAktivite.objects.filter(
+            mac__in=device_macs,
+            tarih=bugun
+        )
+        
+        if gunluk_aktiviteler.exists():
+            toplam_adim = sum(ga.toplam_adim for ga in gunluk_aktiviteler)
+            ortalama_adim = toplam_adim / hayvan_sayisi if hayvan_sayisi > 0 else 0
+            
+            toplam_skor = sum(ga.kizginlik_skoru for ga in gunluk_aktiviteler)
+            ortalama_skor = toplam_skor / hayvan_sayisi if hayvan_sayisi > 0 else 0
+            
+            alarm_sayisi = sum(1 for ga in gunluk_aktiviteler if ga.kizginlik_alarm)
+            
+            # Ortalama yatma süresi
+            yatma_sureleri = [ga.yatma_suresi_dk for ga in gunluk_aktiviteler if ga.yatma_suresi_dk > 0]
+            ortalama_yatma = sum(yatma_sureleri) / len(yatma_sureleri) if yatma_sureleri else 0
+        else:
+            ortalama_adim = 0
+            ortalama_skor = 0
+            alarm_sayisi = 0
+            ortalama_yatma = 0
+        
+        result.append({
+            'paddock_id': paddock.id,
+            'paddock_name': paddock.name,
+            'hayvan_sayisi': hayvan_sayisi,
+            'ortalama_adim': round(ortalama_adim, 1),
+            'ortalama_kizginlik_skoru': round(ortalama_skor, 1),
+            'alarm_sayisi': alarm_sayisi,
+            'ortalama_yatma_suresi': round(ortalama_yatma, 1),
+            'warning': ortalama_adim < 1000,  # Düşük aktivite uyarısı
+        })
+    
+    return Response(result, status=200)
 
 
 # ─────────────────────────────────────────────
@@ -427,18 +730,26 @@ def cihazlar_heatmap(request):
         alert_param = request.GET.get('alert', 'all')
         bugun = date.today()
         
-        devices = Device.objects.all()
+        # N+1 SORUNU ÇÖZÜLDÜ: Tek soruyla tüm cihazlar ve bugünkü aktiviteleri al
+        devices = Device.objects.prefetch_related(
+            Prefetch(
+                'gunlukaktivite_set',
+                queryset=GunlukAktivite.objects.filter(tarih=bugun),
+                to_attr='today_aktivite'
+            )
+        ).all()
+        
         res_data = []
-
         for d in devices:
-            aktivite = GunlukAktivite.objects.filter(mac=d.mac_address, tarih=bugun).first()
+            # Prefetch'ten bugünkü aktiviteyi al
+            aktivite = d.today_aktivite[0] if d.today_aktivite else None
             
             # 🚀 EMNİYET KİLİDİ: last_seen None ise hata vermesin
             is_online = False
             if d.last_seen:
                 diff = (timezone.now() - d.last_seen).total_seconds()
-                is_online = diff < 300 
-
+                is_online = diff < 300
+            
             item = {
                 "mac": d.mac_address,
                 "name": d.name if d.name else f"İnek-{d.mac_address[:6].upper()}",
@@ -458,7 +769,7 @@ def cihazlar_heatmap(request):
             else:
                 item["animal"] = None
             res_data.append(item)
-
+        
         # Sıralama mantığı
         if sort_param == 'kizginlik':
             res_data = sorted(res_data, key=lambda x: x['kizginlik_skoru'], reverse=True)
@@ -466,10 +777,10 @@ def cihazlar_heatmap(request):
             res_data = sorted(res_data, key=lambda x: x['total_steps'], reverse=True)
         elif sort_param == 'name':
             res_data = sorted(res_data, key=lambda x: x['name'])
-
+        
         if alert_param == 'has_alarm':
             res_data = [d for d in res_data if d['alarm']]
-
+        
         return Response(res_data)
     except Exception as e:
         print(f"Heatmap Hatası: {e}") # Terminale hatayı basar
@@ -807,8 +1118,11 @@ def animal_list(request):
         return Response({"error": "Authentication required"}, status=401)
     
     animals = Animal.objects.all().order_by('-created_at')
+    paginator = StandardResultsSetPagination()
+    paginated_animals = paginator.paginate_queryset(animals, request)
+    
     data = []
-    for animal in animals:
+    for animal in paginated_animals:
         data.append({
             'id': animal.id,
             'ear_tag': animal.ear_tag,
@@ -821,7 +1135,7 @@ def animal_list(request):
             'created_at': animal.created_at.isoformat(),
             'device': animal.device.mac_address if hasattr(animal, 'device') else None,
         })
-    return Response(data, status=200)
+    return paginator.get_paginated_response(data)
 
 
 @api_view(['POST'])
