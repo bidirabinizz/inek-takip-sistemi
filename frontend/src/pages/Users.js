@@ -151,22 +151,23 @@ const Users = () => {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6"> 
       
       {/* Header and Tabs */}
+      
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">👥 Sistem Yönetimi</h1>
-          <div className="flex gap-4 border-b border-cyber-gray/20">
-            <button 
+          <div className="flex gap-4 border-b border-cyber-gray/20 overflow-x-auto pb-1">
+            <button
               onClick={() => setActiveTab('users')}
-              className={`pb-2 text-lg font-semibold transition-colors ${activeTab === 'users' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
+              className={`pb-2 text-lg font-semibold transition-colors whitespace-nowrap ${activeTab === 'users' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
             >
               Kullanıcılar
             </button>
-            <button 
+            <button
               onClick={() => setActiveTab('permissions')}
-              className={`pb-2 text-lg font-semibold transition-colors ${activeTab === 'permissions' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
+              className={`pb-2 text-lg font-semibold transition-colors whitespace-nowrap ${activeTab === 'permissions' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
             >
               Roller & İzinler
             </button>
@@ -192,7 +193,8 @@ const Users = () => {
       {/* TABS CONTENT */}
       {activeTab === 'users' ? (
         <div className="bg-cyber-dark/80 border border-cyber-green/20 rounded-2xl overflow-hidden shadow-xl">
-          <table className="w-full text-left text-sm">
+          {/* Desktop Table */}
+          <table className="w-full text-left text-sm hidden md:table">
             <thead className="bg-cyber-darkBlue/80 text-cyber-green">
               <tr>
                 <th className="px-6 py-4">Kullanıcı Adı</th>
@@ -234,13 +236,49 @@ const Users = () => {
               ))}
             </tbody>
           </table>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden p-4 space-y-4">
+            {users.map((user) => (
+              <div key={user.id} className="bg-cyber-darkBlue/40 border border-cyber-gray/20 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-mono text-white font-semibold">{user.username}</p>
+                    <p className="text-sm text-cyber-gray">{user.email || '-'}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs border ${getRoleBadgeClass(user.role)}`}>
+                    {user.role}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    value={user.role}
+                    onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                    disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
+                    className="flex-1 bg-cyber-dark border border-cyber-gray/30 rounded px-2 py-1 text-sm focus:border-cyber-green outline-none disabled:opacity-50"
+                  >
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="VET">VETERİNER</option>
+                    <option value="WORKER">İŞÇİ</option>
+                  </select>
+                  <button
+                    onClick={() => handleDeleteUser(user.id, user.username)}
+                    disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
+                    className="bg-red-900/50 hover:bg-red-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50 transition"
+                  >
+                    Sil
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         /* PERMISSIONS TAB */
         <div className="space-y-8">
           <p className="text-cyber-gray text-sm">Alt kademedeki rollerin (Veteriner, İşçi) neyi görebileceğini ve yapabileceğini buradan ayarlayabilirsiniz. Admin rolünün tüm izinleri kalıcı olarak açıktır.</p>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {rolesData && Object.entries(rolesData).map(([roleKey, roleInfo]) => (
               <div key={roleKey} className={`bg-cyber-dark/60 border rounded-2xl p-6 ${roleKey==='ADMIN' ? 'border-purple-500/50 shadow-lg shadow-purple-500/10 opacity-70' : 'border-cyber-green/30 shadow-lg shadow-cyber-green/10'}`}>
                 <div className="flex justify-between items-center mb-6">
@@ -286,7 +324,7 @@ const Users = () => {
       {/* Add User Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-cyber-dark border border-cyber-green/30 rounded-2xl shadow-2xl p-6 w-full max-w-md">
+          <div className="bg-cyber-dark border border-cyber-green/30 rounded-2xl shadow-2xl p-4 md:p-8 w-[95%] max-w-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Yeni Kullanıcı</h2>
             <form onSubmit={handleUserSubmit} className="space-y-4">
               <div>
@@ -320,6 +358,7 @@ const Users = () => {
         .toggle-checkbox { right: 1.25rem; transition: right 0.2s ease-in-out, border-color 0.2s ease-in-out; }
       `}</style>
     </div>
+    
   );
 };
 

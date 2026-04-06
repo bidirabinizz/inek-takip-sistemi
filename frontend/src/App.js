@@ -28,9 +28,9 @@ function AppContent() {
 
   return (
     <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-mono`}>
-      <div className="app-container">
+      <div className="flex">
         {isAuthenticated && <Navbar />}
-        <main className="pt-2">
+        <main className="flex-1 md:ml-64 p-6 min-h-screen">
           <Routes>
             <Route
               path="/"
