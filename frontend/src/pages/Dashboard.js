@@ -6,11 +6,13 @@ import {
   fetchSummaryData,
   fetchAlarmDevicesData,
   fetchDeviceNamesData,
-  fetchLiveSensorData
+  fetchLiveSensorData,
+  fetchActivityStatus
 } from '../services/dashboardService';
 import KPICard from '../components/KPICard';
 import AlarmTable from '../components/AlarmTable';
 import { API_BASE } from '../config';
+import { getActivityLabel, getActivityColor } from '../constants/activityTranslations';
 
 // Helper: Calculate standard deviation
 const calculateStdDev = (values) => {
@@ -48,6 +50,8 @@ export default function Dashboard() {
   const [alarmDevices,     setAlarmDevices]     = useState([]);
   const [stillnessTimer,   setStillnessTimer]   = useState(0); // seconds
   const [isStill,          setIsStill]          = useState(false);
+  const [activityStatus,   setActivityStatus]   = useState({ final_activity: 'Durağan / Ayakta' });
+  const [tick,             setTick]             = useState(0); // Force chart re-render
 
   const selectedDeviceRef  = useRef("");
   const lastFetchedTimeRef = useRef(null);
@@ -140,6 +144,18 @@ export default function Dashboard() {
     }
   }, [settings, isStill, resetStillnessTimer]);
 
+  // Fetch activity status for selected device
+  useEffect(() => {
+    if (selectedDevice) {
+      fetchActivityStatus(selectedDevice)
+        .then(status => setActivityStatus(status))
+        .catch(err => {
+          console.error("Activity status fetch error:", err);
+          setActivityStatus({ final_activity: 'Durağan / Ayakta' });
+        });
+    }
+  }, [selectedDevice]);
+
   const fetchDeviceNames = useCallback(async () => {
     try {
       const data = await fetchDeviceNamesData();
@@ -225,13 +241,27 @@ export default function Dashboard() {
   useEffect(() => {
     let ws;
     const connectWebSocket = () => {
-      // WebSocket URL oluştur
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsHost = window.location.hostname || 'localhost';
-      const wsPort = '8000'; // Django varsayılan port
-      const wsUrl = `${wsProtocol}//${wsHost}:${wsPort}/ws/sensor-data/`;
+      // 1. Get the actual IP/hostname from the loaded API_BASE (e.g., http://192.168.170.6:8000)
+      // 2. If API_BASE is somehow empty (due to proxy setup), fallback to window.location.hostname
       
-      console.log("[WebSocket] Bağlanıyor:", wsUrl);
+      let wsUrl = '';
+      
+      // Check if API_BASE is a real URL and not just a relative proxy path like "" or "/"
+      if (API_BASE && API_BASE.startsWith('http')) {
+          wsUrl = API_BASE.replace(/^http/, 'ws') + '/ws/sensor-data/';
+      } else {
+          // If we are here, package.json "proxy" is active. We MUST manually specify the Django IP
+          // because window.location.hostname (localhost:3000) won't reach the networked Django (192.168.X.X:8000).
+          // Try to extract the IP from the proxy string in package.json if possible, otherwise use a fallback.
+          const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          
+          // WARNING: We are forcing the host to the known Django server IP to bypass localhost 1006 errors.
+          const wsHost = '192.168.170.6';
+          
+          wsUrl = `${wsProtocol}//${wsHost}:8000/ws/sensor-data/`;
+      }
+      
+      console.log("[WebSocket] Kesin hedef adres:", wsUrl);
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -271,8 +301,13 @@ export default function Dashboard() {
                     x: parseFloat(data.x.toFixed(3)),
                     y: parseFloat(data.y.toFixed(3)),
                   };
-                  return [...prev, newPoint].slice(-300);
+                  // Ensure a completely new array is returned to trigger re-render
+                  const updatedData = [...prev, newPoint];
+                  // Keep only the last 300 points
+                  return updatedData.slice(-300);
                 });
+                // Force chart re-render by incrementing tick
+                setTick(prevTick => prevTick + 1);
 
                 // Check stillness on WebSocket data
                 const mag = Math.sqrt(data.x**2 + data.y**2 + data.z**2);
@@ -383,6 +418,24 @@ export default function Dashboard() {
             />
             <span className="text-[11px] tracking-widest" style={{ color: displayStatusColor }}>{displayStatusLabel}</span>
           </div>
+          {/* Activity Status Badge */}
+          {selectedDevice && (
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+              style={{
+                backgroundColor: `${getActivityColor(activityStatus.final_activity)}20`,
+                border: `1px solid ${getActivityColor(activityStatus.final_activity)}40`
+              }}
+            >
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ background: getActivityColor(activityStatus.final_activity), boxShadow: `0 0 8px ${getActivityColor(activityStatus.final_activity)}` }}
+              />
+              <span className="text-[11px] tracking-widest" style={{ color: getActivityColor(activityStatus.final_activity) }}>
+                {getActivityLabel(activityStatus.final_activity)}
+              </span>
+            </div>
+          )}
         </header>
 
         {/* Behavioral Sleep Timer Display */}
@@ -436,11 +489,11 @@ export default function Dashboard() {
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+              <LineChart key={`chart-${tick}`} data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }} syncId="anyId">
                 <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" />
                 <XAxis dataKey="timeLabel" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={{ stroke: "rgba(255,255,255,0.06)" }} interval="preserveStartEnd" />
                 <YAxis domain={[0, 20]} tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} width={32} />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={<CustomTooltip />} isAnimationActive={false} />
                 <ReferenceLine y={settings.MAG_PEAK_THRESHOLD} stroke="#fbbf24" strokeDasharray="4 4" strokeOpacity={0.5} label={{ value: "PEAK", position: "insideTopRight", fontSize: 9, fill: "#fbbf24" }} />
                 <ReferenceLine y={settings.MAG_VALLEY_THRESHOLD} stroke="#f472b6" strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: "VALLEY", position: "insideBottomRight", fontSize: 9, fill: "#f472b6" }} />
                 <ReferenceLine y={settings.EXCITED_MAG} stroke="#f87171" strokeDasharray="6 3" strokeOpacity={0.3} label={{ value: "KIZGINLIK", position: "insideTopLeft", fontSize: 9, fill: "#f87171" }} />

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../config';
-
+import { getActivityLabel, getActivityColor } from '../constants/activityTranslations';
+import { fetchActivityStatus } from '../services/dashboardService';
 
 import { getCookie } from '../utils/cookieUtils';
 
@@ -14,6 +15,7 @@ const DevicesView = () => {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(null);
   const [showAssignDropdown, setShowAssignDropdown] = useState(null);
+  const [activityStatuses, setActivityStatuses] = useState({});
 
   const handleSelectDevice = (mac) => {
     navigate(`/report/${mac}`);
@@ -56,6 +58,28 @@ const DevicesView = () => {
     fetchDevices();
     fetchAnimals();
   }, []);
+
+  // Fetch activity statuses for all devices
+  useEffect(() => {
+    if (devices.length > 0) {
+      const fetchAllActivities = async () => {
+        const statuses = {};
+        await Promise.all(
+          devices.map(async (dev) => {
+            try {
+              const status = await fetchActivityStatus(dev.mac_address || dev.mac);
+              statuses[dev.mac_address || dev.mac] = status;
+            } catch (err) {
+              console.error(`Activity status fetch error for ${dev.mac}:`, err);
+              statuses[dev.mac_address || dev.mac] = { final_activity: 'Durağan / Ayakta' };
+            }
+          })
+        );
+        setActivityStatuses(statuses);
+      };
+      fetchAllActivities();
+    }
+  }, [devices]);
 
   const handleAssignAnimal = async (deviceMac, earTag) => {
     setAssigning(deviceMac);
@@ -161,6 +185,29 @@ const DevicesView = () => {
               )}
               
               <div className="h-px bg-white bg-opacity-5 my-3" />
+              
+              {/* Activity Status Display */}
+              {(() => {
+                const mac = dev.mac_address || dev.mac;
+                const activity = activityStatuses[mac]?.final_activity || 'Durağan / Ayakta';
+                const label = getActivityLabel(activity);
+                const color = getActivityColor(activity);
+                return (
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xs text-gray-400">DURUM:</span>
+                    <span
+                      className="text-sm font-semibold px-2 py-1 rounded"
+                      style={{
+                        color,
+                        backgroundColor: `${color}20`,
+                        border: `1px solid ${color}40`
+                      }}
+                    >
+                      {label}
+                    </span>
+                  </div>
+                );
+              })()}
               
               <div className="flex justify-between items-center">
                 <div>

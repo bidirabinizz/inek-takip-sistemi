@@ -88,29 +88,20 @@ CHANNEL_LAYERS = {
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-# Yerel (Local) test için SQLite ayarı
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'mssql',
+        'NAME': 'inekprojesi',
+        'USER': 'sa',
+        'PASSWORD': 'OpenMind123.', 
+        'HOST': '127.0.0.1', # Madem doğrudan Windows Server içindesin, 127.0.0.1 (localhost) kullanmak en hızlısıdır.
+        'PORT': '1433',
+        'OPTIONS': {
+            'driver': 'ODBC Driver 17 for SQL Server',
+            'extra_params': 'TrustServerCertificate=yes;', # 🚀 Hatanın çözümü burası!
+        },
     }
 }
-
-# --- SUNUCUDA KULLANDIĞIN ORİJİNAL AYAR (Şimdilik yoruma aldık) ---
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'mssql',
-#         'NAME': 'inekprojesi',
-#         'USER': 'sa',
-#         'PASSWORD': 'OpenMind123.', 
-#         'HOST': '127.0.0.1', 
-#         'PORT': '1433',
-#         'OPTIONS': {
-#             'driver': 'ODBC Driver 17 for SQL Server',
-#             'extra_params': 'TrustServerCertificate=yes;', 
-#         },
-#     }
-# }
 
 
 
@@ -174,8 +165,5 @@ CSRF_TRUSTED_ORIGINS = [
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'core.authentication.CsrfExemptSessionAuthentication',
-    ),
-}
+# Ensure CORS headers are set correctly for credentials
+CORS_ALLOW_CREDENTIALS = True

@@ -6,7 +6,7 @@ export function isNightHour(settings) {
 }
 
 export function classifyActivityRaw(mags, recentPeakCount, settings) {
-  if (!mags || mags.length < 10) return "UNKNOWN";
+  if (!mags || mags.length < 10) return "STILL";
 
   const avgMag = mean(mags);
   const magStd = stdDev(mags);
@@ -23,7 +23,8 @@ export function classifyActivityRaw(mags, recentPeakCount, settings) {
       avgMag > settings.STILL_MAG_MIN &&
       avgMag < settings.STILL_MAG_MAX) return "STILL";
 
-  return "UNKNOWN";
+  // Default to STILL instead of UNKNOWN
+  return "STILL";
 }
 
 export function detectSteps(smoothedMags, timestamps, stateRef, lastStepTimeRef, settings) {

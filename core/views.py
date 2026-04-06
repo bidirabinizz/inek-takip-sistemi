@@ -113,15 +113,16 @@ def _process_sensor_data_batch(mac, x_list, y_list, z_list, mag_list, created_ti
     
     # Final aktivite kararı
     if activity_type == "EXCITED":
-        final_activity = "EXCITED"
+        final_activity = "KIZGINLIK"
     elif activity_type == "WALKING":
-        final_activity = "WALKING"
+        final_activity = "YÜRÜYOR"
     elif is_lying:
-        final_activity = "LYING"
+        final_activity = "YATIYOR"
     elif activity_type == "STILL":
-        final_activity = "STANDING"
+        final_activity = "Durağan / Ayakta"
     else:
-        final_activity = "UNKNOWN"
+        # Varsayılan olarak Durağan / Ayakta (UNKNOWN yerine)
+        final_activity = "Durağan / Ayakta"
     
     kayit.last_activity = final_activity
     kayit.last_activity_time = created_time
@@ -593,15 +594,16 @@ def aktivite_guncelle(request):
 
     # Final aktivite kararı
     if raw_activity == "EXCITED":
-        final_activity = "EXCITED"
+        final_activity = "KIZGINLIK"
     elif raw_activity == "WALKING":
-        final_activity = "WALKING"
+        final_activity = "YÜRÜYOR"
     elif is_lying:
-        final_activity = "LYING"
+        final_activity = "YATIYOR"
     elif raw_activity == "STILL":
-        final_activity = "STANDING"
+        final_activity = "Durağan / Ayakta"
     else:
-        final_activity = "UNKNOWN"
+        # Varsayılan olarak Durağan / Ayakta (UNKNOWN yerine)
+        final_activity = "Durağan / Ayakta"
 
     # 🚀 SON AKTİVİTEYİ KAYDET
     kayit.last_activity = final_activity
@@ -642,7 +644,7 @@ def aktivite_durum(request):
 
     if not kayit:
         return Response({
-            "final_activity": "UNKNOWN",
+            "final_activity": "Durağan / Ayakta",
             "lying_total_mins": 0,
             "still_mins": 0,
         })
@@ -670,19 +672,20 @@ def aktivite_durum(request):
         if elapsed_seconds > 300:  # 5 dakika
             # Sayaçları kontrol et
             if kayit.lying_start_time:
-                final_activity = "LYING"
+                final_activity = "YATIYOR"
             elif kayit.still_start_time:
                 saat = now.hour
                 gece_mi = saat >= 22 or saat < 6
                 if gece_mi or still_mins >= 10:
-                    final_activity = "LYING"
+                    final_activity = "YATIYOR"
                 else:
-                    final_activity = "STANDING"
+                    final_activity = "Durağan / Ayakta"
             else:
-                final_activity = "UNKNOWN"
+                # Varsayılan olarak Durağan / Ayakta
+                final_activity = "Durağan / Ayakta"
     else:
-        # Hiç kayıt yoksa UNKNOWN
-        final_activity = "UNKNOWN"
+        # Hiç kayıt yoksa varsayılan Durağan / Ayakta
+        final_activity = "Durağan / Ayakta"
 
     return Response({
         "final_activity": final_activity,

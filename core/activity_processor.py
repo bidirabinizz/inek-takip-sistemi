@@ -79,10 +79,10 @@ def classifyActivityRaw(x, y, z, mag, settings):
     excited = 1 if mag_peak > settings.EXCITED_MAG else 0
     # Aktivite tülumlüğı
     if excited > 0:
-        return ('Küzgünlük', steps, excited)
+        return ('EXCITED', steps, excited)
     elif horiz_std > settings.WALK_STD_MAX:
-        return ('Yürünyor', steps, 0)
+        return ('WALKING', steps, 0)
     elif horiz_std < settings.WALK_STD_MIN:
-        return ('Açıkta Durağan', steps, 0)
+        return ('STILL', steps, 0)
     else:
-        return ('Yürünmayan', steps, 0)
+        return ('STILL', steps, 0)
