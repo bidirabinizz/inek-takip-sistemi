@@ -58,7 +58,7 @@ const Settings = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken') // <--- İŞTE BURAYI EKLEDİK
+          'X-CSRFToken': getCookie('csrftoken')
         },
         credentials: 'include',
         body: JSON.stringify(settings),
@@ -86,7 +86,7 @@ const Settings = () => {
 
   const renderInput = (field, label, type = 'number', step = 1, min, max) => (
     <div key={field} className="mb-4">
-      <label htmlFor={field} className="block text-sm font-medium text-gray-300 mb-2">
+      <label htmlFor={field} className="block text-sm font-medium text-slate-300 mb-2">
         {label}
       </label>
       <input
@@ -97,92 +97,90 @@ const Settings = () => {
         step={step}
         min={min}
         max={max}
-        className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
         disabled={loading}
       />
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Sistem Ayarları</h1>
-            <p className="text-gray-400">Aktivite tanıma algoritması parametreleri</p>
+    <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      <div className="bg-slate-800 rounded-xl shadow-md p-4 md:p-6 border border-slate-700">
+        <div className="mb-6">
+          <h1 className="text-xl md:text-2xl font-bold text-slate-100 mb-2">Sistem Ayarları</h1>
+          <p className="text-slate-400 text-sm">Aktivite tanıma algoritması parametreleri</p>
+        </div>
+
+        {message.text && (
+          <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-emerald-900/30 border border-emerald-500/50 text-emerald-200' : 'bg-rose-900/30 border border-rose-500/50 text-rose-200'}`}>
+            {message.text}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-indigo-400 mb-4 pb-2 border-b border-slate-700">Kızgınlık (Excited) Tespiti</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {renderInput('EXCITED_MAG', 'Eşik Değer (m/s²)', 'number', 0.1)}
+            </div>
           </div>
 
-          {message.text && (
-            <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-900/50 border border-green-500 text-green-200' : 'bg-red-900/50 border border-red-500 text-red-200'}`}>
-              {message.text}
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-indigo-400 mb-4 pb-2 border-b border-slate-700">Yürüyüş Tespiti</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {renderInput('WALK_STD_MIN', 'Min Standart Sapma', 'number', 0.1)}
+              {renderInput('WALK_STD_MAX', 'Max Standart Sapma', 'number', 0.1)}
+              {renderInput('WALK_PEAKS_MIN', 'Min Tepe Sayısı (8s)', 'number', 1, 0)}
             </div>
-          )}
+          </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-purple-400 mb-4 pb-2 border-b border-gray-700">Kızgınlık (Excited) Tespiti</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {renderInput('EXCITED_MAG', 'Eşik Değer (m/s²)', 'number', 0.1)}
-              </div>
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-indigo-400 mb-4 pb-2 border-b border-slate-700">Durağan (Still) Tespiti</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {renderInput('STILL_STD_MAX', 'Max Standart Sapma', 'number', 0.1)}
+              {renderInput('STILL_MAG_MIN', 'Min Magnitude (m/s²)', 'number', 0.1)}
+              {renderInput('STILL_MAG_MAX', 'Max Magnitude (m/s²)', 'number', 0.1)}
             </div>
+          </div>
 
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-purple-400 mb-4 pb-2 border-b border-gray-700">Yürüyüş Tespiti</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {renderInput('WALK_STD_MIN', 'Min Standart Sapma', 'number', 0.1)}
-                {renderInput('WALK_STD_MAX', 'Max Standart Sapma', 'number', 0.1)}
-                {renderInput('WALK_PEAKS_MIN', 'Min Tepe Sayısı (8s)', 'number', 1, 0)}
-              </div>
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-indigo-400 mb-4 pb-2 border-b border-slate-700">Yatma (Lying) Tespiti</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {renderInput('LYING_STILL_MIN_MINUTES', 'Gündüz Min Süre (dk)', 'number', 1, 0)}
+              {renderInput('LYING_NIGHT_START', 'Gece Başlangıç (saat)', 'number', 1, 0, 23)}
+              {renderInput('LYING_NIGHT_END', 'Gece Bitiş (saat)', 'number', 1, 0, 23)}
             </div>
+          </div>
 
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-purple-400 mb-4 pb-2 border-b border-gray-700">Durağan (Still) Tespiti</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {renderInput('STILL_STD_MAX', 'Max Standart Sapma', 'number', 0.1)}
-                {renderInput('STILL_MAG_MIN', 'Min Magnitude (m/s²)', 'number', 0.1)}
-                {renderInput('STILL_MAG_MAX', 'Max Magnitude (m/s²)', 'number', 0.1)}
-              </div>
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-indigo-400 mb-4 pb-2 border-b border-slate-700">Adım Sayacı (Peak Detection)</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {renderInput('MAG_PEAK_THRESHOLD', 'Tepe Eşiği (m/s²)', 'number', 0.1)}
+              {renderInput('MAG_VALLEY_THRESHOLD', 'Vadi Eşiği (m/s²)', 'number', 0.1)}
+              {renderInput('COOLDOWN_MS', 'Soğuma Süresi (ms)', 'number', 10, 0)}
+              {renderInput('WINDOW_SIZE', 'Pencere Boyutu', 'number', 1, 1, 20)}
+              {renderInput('FETCH_INTERVAL_MS', 'Veri Çekme Aralığı (ms)', 'number', 10, 100)}
             </div>
+          </div>
 
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-purple-400 mb-4 pb-2 border-b border-gray-700">Yatma (Lying) Tespiti</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {renderInput('LYING_STILL_MIN_MINUTES', 'Gündüz Min Süre (dk)', 'number', 1, 0)}
-                {renderInput('LYING_NIGHT_START', 'Gece Başlangıç (saat)', 'number', 1, 0, 23)}
-                {renderInput('LYING_NIGHT_END', 'Gece Bitiş (saat)', 'number', 1, 0, 23)}
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-purple-400 mb-4 pb-2 border-b border-gray-700">Adım Sayacı (Peak Detection)</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {renderInput('MAG_PEAK_THRESHOLD', 'Tepe Eşiği (m/s²)', 'number', 0.1)}
-                {renderInput('MAG_VALLEY_THRESHOLD', 'Vadi Eşiği (m/s²)', 'number', 0.1)}
-                {renderInput('COOLDOWN_MS', 'Soğuma Süresi (ms)', 'number', 10, 0)}
-                {renderInput('WINDOW_SIZE', 'Pencere Boyutu', 'number', 1, 1, 20)}
-                {renderInput('FETCH_INTERVAL_MS', 'Veri Çekme Aralığı (ms)', 'number', 10, 100)}
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <button
-                type="submit"
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={loading}
-              >
-                {loading ? 'Kaydediliyor...' : 'Ayarları Kaydet'}
-              </button>
-              <button
-                type="button"
-                onClick={fetchSettings}
-                className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50"
-                disabled={loading}
-              >
-                Yenile
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-700">
+            <button
+              type="submit"
+              className="flex-1 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading}
+            >
+              {loading ? 'Kaydediliyor...' : 'Ayarları Kaydet'}
+            </button>
+            <button
+              type="button"
+              onClick={fetchSettings}
+              className="flex-1 sm:flex-none px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-lg transition-all duration-200 disabled:opacity-50"
+              disabled={loading}
+            >
+              Yenile
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

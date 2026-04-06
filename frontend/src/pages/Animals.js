@@ -196,309 +196,302 @@ const Animals = () => {
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
-      <div className="text-white text-xl">Yükleniyor...</div>
+    <div className="min-h-screen flex items-center justify-center bg-slate-900">
+      <div className="text-slate-100 text-xl">Yükleniyor...</div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-gray-800 rounded-2xl shadow-2xl p-4 md:p-8 border border-gray-700">
-          {/* Header */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Hayvan Yönetimi</h1>
-              <p className="text-gray-400 text-sm md:text-base">Küpe numaraları ve hayvan bilgileri</p>
-            </div>
-            {userRole !== 'WORKER' && (
-              <button
-                onClick={() => setShowModal(true)}
-                className="w-full md:w-auto px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200"
-              >
-                + Yeni Hayvan Ekle
-              </button>
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-100 mb-2">Hayvan Yönetimi</h1>
+          <p className="text-slate-400 text-sm">Küpe numaraları ve hayvan bilgileri</p>
+        </div>
+        {userRole !== 'WORKER' && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition-colors"
+          >
+            + Yeni Hayvan Ekle
+          </button>
+        )}
+      </div>
+
+      {message.text && (
+        <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-emerald-900/30 border border-emerald-500/50 text-emerald-200' : 'bg-rose-900/30 border border-rose-500/50 text-rose-200'}`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Desktop Table */}
+      <div className="hidden md:block overflow-x-auto bg-slate-800 rounded-xl border border-slate-700">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-slate-700/50">
+            <tr>
+              <th className="px-6 py-4 text-slate-200 font-semibold">Küpe No</th>
+              <th className="px-6 py-4 text-slate-200 font-semibold">İsim</th>
+              <th className="px-6 py-4 text-slate-200 font-semibold">Doğum Tarihi</th>
+              <th className="px-6 py-4 text-slate-200 font-semibold">Cinsiyet</th>
+              <th className="px-6 py-4 text-slate-200 font-semibold">Padok</th>
+              <th className="px-6 py-4 text-slate-200 font-semibold">Durum</th>
+              <th className="px-6 py-4 text-slate-200 font-semibold">Atanmış Cihaz</th>
+              <th className="px-6 py-4 text-slate-200 font-semibold text-right">İşlemler</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-700">
+            {animals.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="px-6 py-12 text-center text-slate-400">Henüz hayvan eklenmemiş</td>
+              </tr>
+            ) : (
+              animals.map((animal) => (
+                <tr key={animal.id} className="hover:bg-slate-700/30 transition-colors">
+                  <td className="px-6 py-4 text-slate-100 font-mono">{animal.ear_tag}</td>
+                  <td className="px-6 py-4 text-slate-300">{animal.name || '-'}</td>
+                  <td className="px-6 py-4 text-slate-300">{animal.birth_date || '-'}</td>
+                  <td className="px-6 py-4 text-slate-300">{animal.gender}</td>
+                  <td className="px-6 py-4 text-slate-300">{animal.paddock || '-'}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${animal.is_active ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'}`}>
+                      {animal.is_active ? 'Aktif' : 'Pasif'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-slate-300 font-mono">{animal.device || '-'}</td>
+                  <td className="px-6 py-4 text-right">
+                    {userRole !== 'WORKER' ? (
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => handleEdit(animal)}
+                          className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs rounded transition-colors"
+                        >
+                          Düzenle
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(animal.id, animal.is_active)}
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
+                        >
+                          {animal.is_active ? 'Pasif Yap' : 'Aktif Yap'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(animal.id)}
+                          className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded transition-colors"
+                        >
+                          Sil
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 text-sm">-</span>
+                    )}
+                    {animal.device && (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => navigate(`/report/${animal.device}`)}
+                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded transition-colors"
+                        >
+                          Detaylı Rapor
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))
             )}
-          </div>
+          </tbody>
+        </table>
+      </div>
 
-          {/* Message */}
-          {message.text && (
-            <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-900/50 border border-green-500 text-green-200' : 'bg-red-900/50 border border-red-500 text-red-200'}`}>
-              {message.text}
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-4">
+        {animals.map((animal) => (
+          <div key={animal.id} className="bg-slate-800 border border-slate-700 rounded-xl p-4 space-y-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="font-mono text-slate-100 font-semibold">{animal.ear_tag}</p>
+                <p className="text-sm text-slate-300">{animal.name || '-'}</p>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${animal.is_active ? 'bg-emerald-900/50 text-emerald-300' : 'bg-rose-900/50 text-rose-300'}`}>
+                {animal.is_active ? 'Aktif' : 'Pasif'}
+              </span>
             </div>
-          )}
-
-          {/* Table Container */}
-          <div className="overflow-x-auto -mx-4 md:mx-0">
-            <div className="min-w-full">
-              {/* Desktop Table */}
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Küpe No</th>
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">İsim</th>
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Doğum Tarihi</th>
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Cinsiyet</th>
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Padok</th>
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Durum</th>
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">Atanmış Cihaz</th>
-                    <th className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-semibold text-xs md:text-sm whitespace-nowrap">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {animals.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="py-8 text-center text-gray-400">Henüz hayvan eklenmemiş</td>
-                    </tr>
-                  ) : (
-                    animals.map((animal) => (
-                      <tr key={animal.id} className="border-b border-gray-700 hover:bg-gray-700/30 transition-colors">
-                        <td className="py-3 px-2 md:py-4 md:px-4 text-white font-mono text-xs md:text-sm whitespace-nowrap">{animal.ear_tag}</td>
-                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.name || '-'}</td>
-                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.birth_date || '-'}</td>
-                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.gender}</td>
-                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 text-xs md:text-sm whitespace-nowrap">{animal.paddock || '-'}</td>
-                        <td className="py-3 px-2 md:py-4 md:px-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 md:px-3 md:py-1 rounded-full text-xs font-semibold ${animal.is_active ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
-                            {animal.is_active ? 'Aktif' : 'Pasif'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2 md:py-4 md:px-4 text-gray-300 font-mono text-xs md:text-sm whitespace-nowrap">{animal.device || '-'}</td>
-                        <td className="py-3 px-2 md:py-4 md:px-4 whitespace-nowrap">
-                          {userRole !== 'WORKER' ? (
-                            <div className="flex flex-col md:flex-row gap-1 md:gap-2">
-                              <button
-                                onClick={() => handleEdit(animal)}
-                                className="px-2 py-1 md:px-3 md:py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded transition-colors whitespace-nowrap"
-                              >
-                                Düzenle
-                              </button>
-                              <button
-                                onClick={() => handleToggleActive(animal.id, animal.is_active)}
-                                className="px-2 py-1 md:px-3 md:py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors whitespace-nowrap"
-                              >
-                                {animal.is_active ? 'Pasif Yap' : 'Aktif Yap'}
-                              </button>
-                              <button
-                                onClick={() => handleDelete(animal.id)}
-                                className="px-2 py-1 md:px-3 md:py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors whitespace-nowrap"
-                              >
-                                Sil
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-gray-500 text-sm">-</span>
-                          )}
-                          {animal.device && (
-                            <div className="mt-2">
-                              <button
-                                onClick={() => navigate(`/report/${animal.device}`)}
-                                className="px-2 py-1 md:px-3 md:py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors whitespace-nowrap"
-                              >
-                                Detaylı Rapor
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-slate-400 text-xs">Doğum Tarihi</p>
+                <p className="text-slate-100">{animal.birth_date || '-'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Cinsiyet</p>
+                <p className="text-slate-100 font-mono">{animal.gender}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs">Padok</p>
+                <p className="text-slate-100">{animal.paddock || '-'}</p>
+              </div>
             </div>
-          </div>
-
-          {/* Mobile Card View */}
-          <div className="md:hidden p-4 space-y-4">
-            {animals.map((animal) => (
-              <div key={animal.id} className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-mono text-white font-semibold">{animal.ear_tag}</p>
-                    <p className="text-sm text-gray-300">{animal.name || '-'}</p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${animal.is_active ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
-                    {animal.is_active ? 'Aktif' : 'Pasif'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-gray-300 text-xs">Doğum Tarihi</p>
-                    <p className="text-white">{animal.birth_date || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-300 text-xs">Cinsiyet</p>
-                    <p className="text-white font-mono">{animal.gender}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-300 text-xs">Padok</p>
-                    <p className="text-white">{animal.paddock || '-'}</p>
-                  </div>
-                </div>
-                <div className="flex flex-col md:flex-row gap-1 md:gap-2">
+            <div className="flex flex-wrap gap-2">
+              {userRole !== 'WORKER' && (
+                <>
                   <button
                     onClick={() => handleEdit(animal)}
-                    className="px-2 py-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs rounded transition-colors"
                   >
                     Düzenle
                   </button>
                   <button
                     onClick={() => handleToggleActive(animal.id, animal.is_active)}
-                    className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition-colors"
                   >
                     {animal.is_active ? 'Pasif Yap' : 'Aktif Yap'}
                   </button>
                   <button
                     onClick={() => handleDelete(animal.id)}
-                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors whitespace-nowrap"
+                    className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded transition-colors"
                   >
                     Sil
                   </button>
-                </div>
-                {animal.device && (
-                  <div className="mt-2">
-                    <button
-                      onClick={() => navigate(`/report/${animal.device}`)}
-                      className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded transition-colors whitespace-nowrap"
-                    >
-                      Detaylı Rapor
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {animals.length === 0 && (
-              <div className="text-center text-gray-400 py-8">Henüz hayvan eklenmemiş</div>
-            )}
-          </div>
-        </div>
-
-        {/* Modal */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md border border-gray-700">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-white">{isEditing ? 'Hayvan Düzenle' : 'Yeni Hayvan Ekle'}</h2>
+                </>
+              )}
+              {animal.device && (
                 <button
-                  onClick={() => {
-                    setShowModal(false);
-                    setIsEditing(false);
-                    setCurrentAnimalId(null);
-                  }}
-                  className="text-gray-400 hover:text-white text-2xl"
+                  onClick={() => navigate(`/report/${animal.device}`)}
+                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded transition-colors"
                 >
-                  ×
+                  Detaylı Rapor
                 </button>
-              </div>
-
-              <form onSubmit={handleSubmit}>
-                <div className="mb-4">
-                  <label htmlFor="ear_tag" className="block text-sm font-medium text-gray-300 mb-2">
-                    Küpe Numarası *
-                  </label>
-                  <input
-                    type="text"
-                    id="ear_tag"
-                    value={formData.ear_tag}
-                    onChange={(e) => setFormData({ ...formData, ear_tag: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">
-                    İsim
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label htmlFor="birth_date" className="block text-sm font-medium text-gray-300 mb-2">
-                    Doğum Tarihi
-                  </label>
-                  <input
-                    type="date"
-                    id="birth_date"
-                    value={formData.birth_date}
-                    onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label htmlFor="gender" className="block text-sm font-medium text-gray-300 mb-2">
-                    Cinsiyet
-                  </label>
-                  <select
-                    id="gender"
-                    value={formData.gender}
-                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    <option value="Female">Dişi</option>
-                    <option value="Male">Erkek</option>
-                  </select>
-                </div>
-
-                <div className="mb-4">
-                  <label htmlFor="paddock_id" className="block text-sm font-medium text-gray-300 mb-2">
-                    Padok
-                  </label>
-                  <select
-                    id="paddock_id"
-                    value={formData.paddock_id}
-                    onChange={(e) => setFormData({ ...formData, paddock_id: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    <option value="">Atanmamış (Bağımsız)</option>
-                    {paddocks.map((padok) => (
-                      <option key={padok.id} value={padok.id}>
-                        {padok.name} (Kapasite: {padok.capacity || 'Sınırsız'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="mb-6">
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_active}
-                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                      className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-300">Aktif</span>
-                  </label>
-                </div>
-
-                <div className="flex gap-4">
-                  <button
-                    type="submit"
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={submitting}
-                  >
-                    {submitting ? (isEditing ? 'Güncelleniyor...' : 'Ekleniyor...') : (isEditing ? 'Güncelle' : 'Ekle')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all duration-200"
-                  >
-                    İptal
-                  </button>
-                </div>
-              </form>
+              )}
             </div>
           </div>
+        ))}
+        {animals.length === 0 && (
+          <div className="text-center text-slate-400 py-8">Henüz hayvan eklenmemiş</div>
         )}
       </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-lg p-4 md:p-6 w-full max-w-lg">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-100">{isEditing ? 'Hayvan Düzenle' : 'Yeni Hayvan Ekle'}</h2>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setIsEditing(false);
+                  setCurrentAnimalId(null);
+                }}
+                className="text-slate-400 hover:text-slate-100 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div className="mb-4">
+                <label htmlFor="ear_tag" className="block text-sm font-medium text-slate-300 mb-2">
+                  Küpe Numarası *
+                </label>
+                <input
+                  type="text"
+                  id="ear_tag"
+                  value={formData.ear_tag}
+                  onChange={(e) => setFormData({ ...formData, ear_tag: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="name" className="block text-sm font-medium text-slate-300 mb-2">
+                  İsim
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="birth_date" className="block text-sm font-medium text-slate-300 mb-2">
+                  Doğum Tarihi
+                </label>
+                <input
+                  type="date"
+                  id="birth_date"
+                  value={formData.birth_date}
+                  onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="gender" className="block text-sm font-medium text-slate-300 mb-2">
+                  Cinsiyet
+                </label>
+                <select
+                  id="gender"
+                  value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="Female">Dişi</option>
+                  <option value="Male">Erkek</option>
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="paddock_id" className="block text-sm font-medium text-slate-300 mb-2">
+                  Padok
+                </label>
+                <select
+                  id="paddock_id"
+                  value={formData.paddock_id}
+                  onChange={(e) => setFormData({ ...formData, paddock_id: e.target.value })}
+                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="">Atanmamış (Bağımsız)</option>
+                  {paddocks.map((padok) => (
+                    <option key={padok.id} value={padok.id}>
+                      {padok.name} (Kapasite: {padok.capacity || 'Sınırsız'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-6">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="w-4 h-4 text-indigo-600 bg-slate-700 border-slate-600 rounded focus:ring-indigo-500"
+                  />
+                  <span className="ml-2 text-sm text-slate-300">Aktif</span>
+                </label>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={submitting}
+                >
+                  {submitting ? (isEditing ? 'Güncelleniyor...' : 'Ekleniyor...') : (isEditing ? 'Güncelle' : 'Ekle')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-lg transition-all duration-200"
+                >
+                  İptal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

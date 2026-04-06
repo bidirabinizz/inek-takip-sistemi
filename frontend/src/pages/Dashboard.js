@@ -26,8 +26,8 @@ const calculateStdDev = (values) => {
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-950/90 border border-emerald-400/30 rounded-lg py-2 px-3 text-xs text-slate-200">
-      <div className="text-emerald-400 mb-1 font-bold">{label}</div>
+    <div className="bg-slate-800/90 border border-slate-600 rounded-lg py-2 px-3 text-xs text-slate-200">
+      <div className="text-indigo-400 mb-1 font-bold">{label}</div>
       {payload.map((p) => (
         <div key={p.name} style={{ color: p.color }}>
           {p.name}: <strong>{parseFloat(p.value).toFixed(3)}</strong>
@@ -48,10 +48,10 @@ export default function Dashboard() {
   const [selectedDevice,   setSelectedDevice]   = useState("");
   const [summaryData,      setSummaryData]      = useState(null);
   const [alarmDevices,     setAlarmDevices]     = useState([]);
-  const [stillnessTimer,   setStillnessTimer]   = useState(0); // seconds
+  const [stillnessTimer,   setStillnessTimer]   = useState(0);
   const [isStill,          setIsStill]          = useState(false);
   const [activityStatus,   setActivityStatus]   = useState({ final_activity: 'Durağan / Ayakta' });
-  const [tick,             setTick]             = useState(0); // Force chart re-render
+  const [tick,             setTick]             = useState(0);
 
   const selectedDeviceRef  = useRef("");
   const lastFetchedTimeRef = useRef(null);
@@ -63,7 +63,6 @@ export default function Dashboard() {
     fetchSettings();
   }, [fetchSettings]);
 
-  // Live stillness timer updater
   useEffect(() => {
     const interval = setInterval(() => {
       if (isStill && stillnessStartTimeRef.current) {
@@ -74,7 +73,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [isStill]);
 
-  // Reset timer when device changes
   useEffect(() => {
     resetStillnessTimer();
   }, [selectedDevice]);
@@ -120,31 +118,25 @@ export default function Dashboard() {
   const checkStillness = useCallback((mag, std) => {
     const { STILL_STD_MAX, STILL_MAG_MIN, STILL_MAG_MAX, WALK_STD_MIN, LYING_STILL_MIN_MINUTES } = settings;
     
-    // Check if current values are within "still" range
     const isStillRange = std <= STILL_STD_MAX && mag >= STILL_MAG_MIN && mag <= STILL_MAG_MAX;
     const isMoving = std > WALK_STD_MIN;
 
     if (isMoving) {
-      // Movement detected - reset timer
       resetStillnessTimer();
       return;
     }
 
     if (isStillRange) {
       if (!isStill) {
-        // Just entered stillness - start timer
         setIsStill(true);
         stillnessStartTimeRef.current = Date.now();
         setStillnessTimer(0);
       }
-      // Timer will update via interval
     } else {
-      // Outside still range but not moving - reset timer
       resetStillnessTimer();
     }
   }, [settings, isStill, resetStillnessTimer]);
 
-  // Fetch activity status for selected device
   useEffect(() => {
     if (selectedDevice) {
       fetchActivityStatus(selectedDevice)
@@ -159,7 +151,6 @@ export default function Dashboard() {
   const fetchDeviceNames = useCallback(async () => {
     try {
       const data = await fetchDeviceNamesData();
-      // Ensure we extract the array from the paginated response
       setAvailableDevicesData(data.results || data || []);
     } catch (err) { console.error("İsim çekme hatası:", err); }
   }, []);
@@ -190,7 +181,6 @@ export default function Dashboard() {
 
       const sorted = [...newRecords].sort((a, b) => new Date(a.time) - new Date(b.time));
       
-      // Sadece veri topla - backend tüm hesaplamaları yapıyor
       if (lastFetchedTimeRef.current === null) {
         lastFetchedTimeRef.current = sorted[sorted.length - 1].time;
         setChartData(prev => {
@@ -225,11 +215,9 @@ export default function Dashboard() {
         return [...prev, ...pts].slice(-300);
       });
 
-      // Check stillness on the latest data point
       if (sorted.length > 0) {
         const latest = sorted[sorted.length - 1];
         const mag = Math.sqrt(latest.x**2 + latest.y**2 + latest.z**2);
-        // Calculate std dev from the three axes
         const std = calculateStdDev([latest.x, latest.y, latest.z]);
         checkStillness(mag, std);
       }
@@ -237,27 +225,16 @@ export default function Dashboard() {
     } catch (err) { setStatus("error"); }
   }, [handleDeviceChange, checkStillness]);
 
-  // WebSocket bağlantısı kur
   useEffect(() => {
     let ws;
     const connectWebSocket = () => {
-      // 1. Get the actual IP/hostname from the loaded API_BASE (e.g., http://192.168.170.6:8000)
-      // 2. If API_BASE is somehow empty (due to proxy setup), fallback to window.location.hostname
-      
       let wsUrl = '';
       
-      // Check if API_BASE is a real URL and not just a relative proxy path like "" or "/"
       if (API_BASE && API_BASE.startsWith('http')) {
           wsUrl = API_BASE.replace(/^http/, 'ws') + '/ws/sensor-data/';
       } else {
-          // If we are here, package.json "proxy" is active. We MUST manually specify the Django IP
-          // because window.location.hostname (localhost:3000) won't reach the networked Django (192.168.X.X:8000).
-          // Try to extract the IP from the proxy string in package.json if possible, otherwise use a fallback.
           const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          
-          // WARNING: We are forcing the host to the known Django server IP to bypass localhost 1006 errors.
           const wsHost = '192.168.170.6';
-          
           wsUrl = `${wsProtocol}//${wsHost}:8000/ws/sensor-data/`;
       }
       
@@ -275,9 +252,7 @@ export default function Dashboard() {
           const message = JSON.parse(event.data);
           if (message.type === 'sensor_update') {
             const data = message.data;
-            console.log("[WebSocket] Yeni veri alındı:", data);
             
-            // Cihaz listesini güncelle
             if (data.mac) {
               setAvailableDevices(prev => {
                 const merged = [...new Set([...prev, data.mac])];
@@ -287,7 +262,6 @@ export default function Dashboard() {
                 return merged;
               });
               
-              // Grafik verilerini güncelle
               const currentMac = selectedDeviceRef.current;
               if (currentMac && data.mac === currentMac) {
                 const now = new Date();
@@ -301,15 +275,11 @@ export default function Dashboard() {
                     x: parseFloat(data.x.toFixed(3)),
                     y: parseFloat(data.y.toFixed(3)),
                   };
-                  // Ensure a completely new array is returned to trigger re-render
                   const updatedData = [...prev, newPoint];
-                  // Keep only the last 300 points
                   return updatedData.slice(-300);
                 });
-                // Force chart re-render by incrementing tick
                 setTick(prevTick => prevTick + 1);
 
-                // Check stillness on WebSocket data
                 const mag = Math.sqrt(data.x**2 + data.y**2 + data.z**2);
                 const std = calculateStdDev([data.x, data.y, data.z]);
                 checkStillness(mag, std);
@@ -330,7 +300,6 @@ export default function Dashboard() {
         console.log(`[WebSocket] Bağlantı kapandı. Kod: ${event.code}`);
         setStatus("connecting");
         
-        // 3 saniye sonra yeniden bağlan
         setTimeout(() => {
           if (wsRef.current?.readyState === WebSocket.CLOSED) {
             connectWebSocket();
@@ -341,7 +310,6 @@ export default function Dashboard() {
 
     connectWebSocket();
 
-    // Cleanup
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
@@ -350,31 +318,28 @@ export default function Dashboard() {
     };
   }, [handleDeviceChange, checkStillness]);
 
-  // İlk veri çekme (cihaz isimleri ve ilk grafik verisi için)
   useEffect(() => {
     fetchDeviceNames();
-    fetchData(); // Grafik için ilk veriyi yükle
+    fetchData();
   }, [fetchDeviceNames, fetchData, selectedDevice]);
 
-
-  // Determine if animal is in sleep state based on stillness timer
   const sleepThresholdSeconds = settings.LYING_STILL_MIN_MINUTES * 60;
   const isSleeping = isStill && stillnessTimer >= sleepThresholdSeconds;
   
-  // Update status label and color to include sleep state
   const displayStatus = isSleeping ? "sleeping" : status;
-  const displayStatusColor = isSleeping ? "#8b5cf6" : status === "live" ? "#00ffb4" : status === "error" ? "#ff4d6d" : "#f0c040";
+  const displayStatusColor = isSleeping ? "#818cf8" : status === "live" ? "#10b981" : status === "error" ? "#f87171" : "#fbbf24";
   const displayStatusLabel = isSleeping ? "UYKUDA" : status === "live" ? "CANLI" : status === "error" ? "HATA" : "BAĞLANIYOR";
 
   return (
-    <>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-5 px-4 md:px-9">
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <KPICard 
           label="TOPLAM HAYVAN" 
           value={summaryData?.total_active_animals || 0} 
           description="Aktif hayvanlar" 
           icon="🐄" 
-          colorHex="#00ffb4" 
+          colorHex="#10b981" 
         />
         <KPICard 
           label="ALARMLI İNEKLER" 
@@ -392,33 +357,31 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Alarm Table */}
       <AlarmTable alarmDevices={alarmDevices} />
 
-      <div className="mx-4 md:mx-9 mb-4 md:mb-9">
-        <div className="bg-gradient-to-r from-purple-500/10 to-emerald-400/5 border border-purple-400/30 rounded-xl px-6 py-4 mb-4">
-          <div className="text-xs tracking-widest text-purple-400 opacity-80 mb-1 uppercase">Geliştirici Modu</div>
-          <div className="text-sm text-slate-200 font-semibold">Detaylı Analiz & Kalibrasyon</div>
-        </div>
-
-        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 px-4 md:px-6 py-4 bg-white/5 border border-emerald-400/10 rounded-xl mb-4">
+      {/* Live Monitoring Section */}
+      <div className="bg-slate-800 border border-slate-700 rounded-xl p-4 md:p-6 shadow-md">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-400 tracking-widest">SENSÖR SEÇ:</span>
+            <span className="text-xs text-slate-400 tracking-widest">SENSÖR SEÇ:</span>
             <select
               value={selectedDevice}
               onChange={e => handleDeviceChange(e.target.value)}
-              className="bg-slate-900 border border-emerald-400 text-emerald-400 px-4 py-2 rounded-lg text-sm outline-none cursor-pointer"
+              className="bg-slate-900 border border-slate-600 text-slate-200 px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              {availableDevices.length === 0 ? <option value="">Bekleniyor...</option> : availableDevices.map(mac => ( <option key={mac} value={mac}>{availableDevicesData?.find(d => d.mac === mac)?.name || mac}</option> ))}
+              {availableDevices.length === 0 ? <option value="">Bekleniyor...</option> : availableDevices.map(mac => (
+                <option key={mac} value={mac}>{availableDevicesData?.find(d => d.mac === mac)?.name || mac}</option>
+              ))}
             </select>
           </div>
-          <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-full">
+          <div className="flex items-center gap-2 bg-slate-900/50 px-3 py-1.5 rounded-full">
             <div
               className="w-2 h-2 rounded-full"
-              style={{ background: displayStatusColor, boxShadow: `0 0 8px ${displayStatusColor}`, animation: displayStatus === "live" ? "pulse 1.5s infinite" : "none" }}
+              style={{ background: displayStatusColor }}
             />
-            <span className="text-[11px] tracking-widest" style={{ color: displayStatusColor }}>{displayStatusLabel}</span>
+            <span className="text-xs tracking-widest" style={{ color: displayStatusColor }}>{displayStatusLabel}</span>
           </div>
-          {/* Activity Status Badge */}
           {selectedDevice && (
             <div
               className="flex items-center gap-2 px-3 py-1.5 rounded-full"
@@ -429,18 +392,18 @@ export default function Dashboard() {
             >
               <div
                 className="w-2 h-2 rounded-full"
-                style={{ background: getActivityColor(activityStatus.final_activity), boxShadow: `0 0 8px ${getActivityColor(activityStatus.final_activity)}` }}
+                style={{ background: getActivityColor(activityStatus.final_activity) }}
               />
-              <span className="text-[11px] tracking-widest" style={{ color: getActivityColor(activityStatus.final_activity) }}>
+              <span className="text-xs tracking-widest" style={{ color: getActivityColor(activityStatus.final_activity) }}>
                 {getActivityLabel(activityStatus.final_activity)}
               </span>
             </div>
           )}
-        </header>
+        </div>
 
-        {/* Behavioral Sleep Timer Display */}
+        {/* Sleep Timer Display */}
         {isStill && (
-          <div className={`mb-4 px-4 py-3 rounded-xl border ${isSleeping ? 'bg-purple-900/30 border-purple-400/40' : 'bg-blue-900/20 border-blue-400/30'}`}>
+          <div className={`mb-4 px-4 py-3 rounded-lg border ${isSleeping ? 'bg-indigo-900/20 border-indigo-500/40' : 'bg-blue-900/20 border-blue-500/30'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-lg">{isSleeping ? '😴' : '🛏️'}</span>
@@ -455,28 +418,24 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-              <div className={`text-2xl font-mono font-bold ${isSleeping ? 'text-purple-400' : 'text-blue-400'}`}>
+              <div className={`text-xl font-mono font-bold ${isSleeping ? 'text-indigo-400' : 'text-blue-400'}`}>
                 {Math.floor(stillnessTimer / 60)}:{(stillnessTimer % 60).toString().padStart(2, '0')}
               </div>
             </div>
-            {/* Progress bar showing progress toward sleep threshold */}
-            <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-1000 ${isSleeping ? 'bg-purple-400' : 'bg-blue-400'}`}
+                className={`h-full rounded-full transition-all duration-1000 ${isSleeping ? 'bg-indigo-400' : 'bg-blue-400'}`}
                 style={{ width: `${Math.min((stillnessTimer / sleepThresholdSeconds) * 100, 100)}%` }}
               />
             </div>
           </div>
         )}
 
-
-        <div className="my-4 md:my-6 bg-white/5 border border-emerald-400/10 rounded-xl pt-4 md:pt-6 px-4 pb-4">
-          <div className="flex justify-between items-center mb-4 pl-2">
-            <div>
-              <div className="text-[10px] tracking-widest text-emerald-400 opacity-60 mb-0.5">CANLI VERİ AKIŞI</div>
-              <div className="text-sm text-slate-200 font-semibold">Ham Magnitude vs Filtrelenmiş Sinyal</div>
-            </div>
-            <div className="flex gap-5 text-[11px]">
+        {/* Live Chart */}
+        <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-3 md:p-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-3">
+            <div className="text-xs tracking-widest text-indigo-400 opacity-80">CANLI VERİ AKIŞI</div>
+            <div className="flex gap-3 text-xs">
               <span className="text-slate-400">— Ham</span>
               <span className="text-emerald-400">— Filtrelenmiş</span>
               <span className="text-sky-300">— Z</span>
@@ -484,27 +443,27 @@ export default function Dashboard() {
           </div>
 
           {(!selectedDevice || chartData.length === 0) ? (
-            <div className="flex h-[300px] items-center justify-center text-slate-400 text-sm">
+            <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
               Grafik verisi bekleniyor veya cihaz seçilmedi...
             </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <LineChart key={`chart-${tick}`} data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }} syncId="anyId">
                 <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="timeLabel" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={{ stroke: "rgba(255,255,255,0.06)" }} interval="preserveStartEnd" />
-                <YAxis domain={[0, 20]} tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} width={32} />
+                <XAxis dataKey="timeLabel" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={{ stroke: "rgba(255,255,255,0.06)" }} interval="preserveStartEnd" />
+                <YAxis domain={[0, 20]} tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} width={32} />
                 <Tooltip content={<CustomTooltip />} isAnimationActive={false} />
                 <ReferenceLine y={settings.MAG_PEAK_THRESHOLD} stroke="#fbbf24" strokeDasharray="4 4" strokeOpacity={0.5} label={{ value: "PEAK", position: "insideTopRight", fontSize: 9, fill: "#fbbf24" }} />
                 <ReferenceLine y={settings.MAG_VALLEY_THRESHOLD} stroke="#f472b6" strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: "VALLEY", position: "insideBottomRight", fontSize: 9, fill: "#f472b6" }} />
                 <ReferenceLine y={settings.EXCITED_MAG} stroke="#f87171" strokeDasharray="6 3" strokeOpacity={0.3} label={{ value: "KIZGINLIK", position: "insideTopLeft", fontSize: 9, fill: "#f87171" }} />
-                <Line type="monotone" dataKey="rawMag" stroke="rgba(100,120,140,0.45)" strokeWidth={1} dot={false} isAnimationActive={false} name="Ham Mag" />
+                <Line type="monotone" dataKey="rawMag" stroke="rgba(148,163,184,0.45)" strokeWidth={1} dot={false} isAnimationActive={false} name="Ham Mag" />
                 <Line type="monotone" dataKey="z" stroke="#7dd3fc" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Z" />
-                <Brush dataKey="timeLabel" height={25} stroke="#4a6070" fill="rgba(0,255,180,0.05)" travellerWidth={10} />
+                <Brush dataKey="timeLabel" height={25} stroke="#64748b" fill="rgba(99,102,241,0.05)" travellerWidth={10} />
               </LineChart>
             </ResponsiveContainer>
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

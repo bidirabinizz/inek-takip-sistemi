@@ -56,14 +56,14 @@ const Navbar = () => {
   const SidebarContent = ({ isMobile = false }) => (
     <div className="flex flex-col h-full">
       {/* Logo Section */}
-      <div className="p-6 border-b border-cyber-green/20">
+      <div className="p-6 border-b border-slate-700">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavigation('/')}>
-          <div className="text-4xl animate-pulse">🐄</div>
+          <div className="text-4xl">🐄</div>
           <div>
-            <h1 className="text-lg font-bold bg-gradient-to-r from-white to-cyber-lightGray bg-clip-text text-transparent tracking-tight">
+            <h1 className="text-lg font-bold text-slate-100 tracking-tight">
               IoT KONTROL
             </h1>
-            <p className="text-xs text-cyber-green font-mono tracking-widest uppercase">Merkezi v3.0</p>
+            <p className="text-xs text-slate-400 font-mono tracking-widest uppercase">Merkezi v3.0</p>
           </div>
         </div>
       </div>
@@ -81,19 +81,19 @@ const Navbar = () => {
                 onClick={() => handleNavigation(tab.path)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 relative group ${
                   isActive
-                    ? 'bg-cyber-green/20 text-cyber-green'
-                    : 'text-cyber-gray hover:text-white hover:bg-cyber-green/10'
+                    ? 'bg-indigo-600/20 text-indigo-400'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
                 }`}
               >
-                {/* Active indicator - glowing left border */}
+                {/* Active indicator - left border */}
                 {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-cyber-green rounded-r-full shadow-[0_0_10px_#00ff88]" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-500 rounded-r-full" />
                 )}
-                <Icon className={`h-5 w-5 ${isActive ? 'text-cyber-green' : ''}`} />
+                <Icon className={`h-5 w-5 ${isActive ? 'text-indigo-400' : 'text-slate-400'}`} />
                 <span className="font-medium">{tab.label}</span>
                 {isActive && (
                   <div className="ml-auto">
-                    <div className="w-2 h-2 bg-cyber-green rounded-full animate-ping" />
+                    <div className="w-2 h-2 bg-indigo-500 rounded-full" />
                   </div>
                 )}
               </button>
@@ -103,25 +103,25 @@ const Navbar = () => {
       </nav>
 
       {/* Bottom Section - User & Logout */}
-      <div className="p-4 border-t border-cyber-green/20">
+      <div className="p-4 border-t border-slate-700">
         {/* Live indicator */}
-        <div className="flex items-center gap-2 text-sm text-cyber-green font-mono bg-cyber-dark/50 px-3 py-2 rounded-lg mb-3">
-          <span className="animate-ping w-2 h-2 bg-green-400 rounded-full"></span>
+        <div className="flex items-center gap-2 text-sm text-emerald-400 font-mono bg-slate-800/50 px-3 py-2 rounded-lg mb-3">
+          <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
           SİSTEM AKTİF
         </div>
         
         {/* User info */}
         <div className="flex items-center gap-3 px-3 py-2 mb-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyber-green/30 to-cyber-green/10 border border-cyber-green/30 flex items-center justify-center">
-            <span className="text-cyber-green font-bold">
+          <div className="w-10 h-10 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center">
+            <span className="text-slate-300 font-bold">
               {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">
+            <p className="text-sm font-medium text-slate-100 truncate">
               {user?.username || 'Kullanıcı'}
             </p>
-            <p className="text-xs text-cyber-gray truncate">
+            <p className="text-xs text-slate-400 truncate">
               {userRole === 'ADMIN' ? 'Yönetici' : 'Kullanıcı'}
             </p>
           </div>
@@ -130,7 +130,7 @@ const Navbar = () => {
         {/* Logout button */}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-red-400 hover:text-red-300 hover:bg-red-900/20 border border-red-500/20 hover:border-red-500/40"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-rose-400 hover:text-rose-300 hover:bg-rose-900/20 border border-rose-500/20 hover:border-rose-500/40"
         >
           <ArrowRightOnRectangleIcon className="h-5 w-5" />
           <span className="font-medium">Çıkış Yap</span>
@@ -142,32 +142,32 @@ const Navbar = () => {
   return (
     <>
       {/* Mobile Header - Always visible on mobile */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#0a0a0c]/95 backdrop-blur-md border-b border-cyber-green/20 z-40 flex items-center justify-between px-4">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-slate-900/95 backdrop-blur-md border-b border-slate-700 z-40 flex items-center justify-between px-4">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
           <div className="text-2xl">🐄</div>
           <div>
-            <h1 className="text-sm font-bold text-white">IoT Kontrol</h1>
-            <p className="text-[10px] text-cyber-green font-mono">Merkezi</p>
+            <h1 className="text-sm font-bold text-slate-100">IoT Kontrol</h1>
+            <p className="text-[10px] text-slate-400 font-mono">Merkezi</p>
           </div>
         </div>
         
         <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-cyber-green/20 rounded-xl transition-all relative">
-            <BellIcon className="h-5 w-5 text-cyber-gray" />
+          <button className="p-2 hover:bg-slate-700 rounded-xl transition-all relative">
+            <BellIcon className="h-5 w-5 text-slate-400" />
             {notifications.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
                 {notifications.length}
               </span>
             )}
           </button>
           <button 
             onClick={toggleSidebar} 
-            className="p-2 hover:bg-cyber-green/20 rounded-xl transition-all"
+            className="p-2 hover:bg-slate-700 rounded-xl transition-all"
           >
             {sidebarOpen ? (
-              <XMarkIcon className="h-6 w-6 text-white" />
+              <XMarkIcon className="h-6 w-6 text-slate-100" />
             ) : (
-              <Bars3Icon className="h-6 w-6 text-white" />
+              <Bars3Icon className="h-6 w-6 text-slate-100" />
             )}
           </button>
         </div>
@@ -182,14 +182,14 @@ const Navbar = () => {
             onClick={() => setSidebarOpen(false)}
           />
           {/* Sidebar panel - slides from left */}
-          <div className="absolute left-0 top-0 bottom-0 w-72 bg-[#0a0a0c]/98 backdrop-blur-xl border-r border-cyber-green/20 shadow-2xl shadow-cyber-green/10 animate-slide-in">
+          <div className="absolute left-0 top-0 bottom-0 w-72 bg-slate-900/98 backdrop-blur-xl border-r border-slate-700 shadow-xl animate-slide-in">
             <SidebarContent isMobile={true} />
           </div>
         </div>
       )}
 
       {/* Desktop Sidebar - Fixed left */}
-      <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-[#0a0a0c]/95 backdrop-blur-xl border-r border-cyber-green/20 shadow-2xl shadow-cyber-green/10 z-30">
+      <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-slate-900/95 backdrop-blur-xl border-r border-slate-700 shadow-xl z-30">
         <SidebarContent />
       </aside>
     </>

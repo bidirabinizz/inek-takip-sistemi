@@ -1518,7 +1518,7 @@ def paddock_detail(request, id):
 
     if request.method == 'GET':
         animal_count = paddock.animals.filter(is_active=True).count()
-        animals_list = list(paddock.animals.filter(is_active=True).values('id', 'ear_tag', 'name'))
+        animals_list = list(paddock.animals.filter(is_active=True).values('id', 'ear_tag', 'name', 'device__mac_address'))
         return Response({
             'id': paddock.id,
             'name': paddock.name,

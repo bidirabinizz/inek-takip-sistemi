@@ -35,22 +35,22 @@ const LoginForm = () => {
 };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyber-dark via-sky-300 to-cyber-darkBlue">
-            <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md border border-gray-700">
-                <div className="text-center mb-8">
-                    <h2 className="text-3xl font-bold text-white mb-2">Giriş Yap</h2>
-                    <p className="text-gray-400">Lütfen kullanıcı bilgilerinizi giriniz</p>
+        <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
+            <div className="bg-slate-800 rounded-xl shadow-lg p-6 md:p-8 w-full max-w-md border border-slate-700">
+                <div className="text-center mb-6 md:mb-8">
+                    <h2 className="text-2xl md:text-3xl font-bold text-slate-100 mb-2">Giriş Yap</h2>
+                    <p className="text-slate-400 text-sm">Lütfen kullanıcı bilgilerinizi giriniz</p>
                 </div>
                 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-5">
                     {error && (
-                        <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-lg text-sm">
+                        <div className="bg-rose-900/30 border border-rose-500/50 text-rose-200 px-4 py-3 rounded-lg text-sm">
                             {error}
                         </div>
                     )}
                     
                     <div>
-                        <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
+                        <label htmlFor="username" className="block text-sm font-medium text-slate-300 mb-2">
                             Kullanıcı Adı
                         </label>
                         <input
@@ -58,7 +58,7 @@ const LoginForm = () => {
                             id="username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                            className="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                             placeholder="Kullanıcı adınız"
                             required
                             disabled={loading}
@@ -66,7 +66,7 @@ const LoginForm = () => {
                     </div>
                     
                     <div>
-                        <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+                        <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
                             Şifre
                         </label>
                         <input
@@ -74,7 +74,7 @@ const LoginForm = () => {
                             id="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                            className="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                             placeholder="Şifreniz"
                             required
                             disabled={loading}
@@ -83,7 +83,7 @@ const LoginForm = () => {
                     
                     <button 
                         type="submit" 
-                        className="w-full bg-gradient-to-r from-slate-400 to-sky-600 text-white font-semibold py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-800 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={loading}
                     >
                         {loading ? (

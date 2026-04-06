@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../config';
 import { getActivityLabel, getActivityColor } from '../constants/activityTranslations';
 import { fetchActivityStatus } from '../services/dashboardService';
-
 import { getCookie } from '../utils/cookieUtils';
 
 const DevicesView = () => {
@@ -29,7 +28,6 @@ const DevicesView = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        // Sayfalama yapısını işle (response.data.results)
         setDevices(data.results || data);
       }
     } catch (err) {
@@ -46,7 +44,6 @@ const DevicesView = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        // Sayfalama yapısını işle (response.data.results)
         setAnimals(data.results || data);
       }
     } catch (err) {
@@ -87,7 +84,7 @@ const DevicesView = () => {
       const response = await fetch(`${API_BASE}/api/devices/assign/`, {
         method: 'POST',
         headers: {
-          'X-CSRFToken': getCookie('csrftoken'), // <--- BURAYI EKLEDİK
+          'X-CSRFToken': getCookie('csrftoken'),
           'Content-Type': 'application/json',
         },
         credentials: 'include',
@@ -142,17 +139,20 @@ const DevicesView = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
-        <div className="text-white text-xl">Yükleniyor...</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="text-slate-100 text-xl">Yükleniyor...</div>
       </div>
     );
   }
 
   return (
-    <div className="px-4 md:px-9 py-4 md:py-6">
-      <h2 className="text-cyber-purple font-light mb-4 md:mb-5 text-lg md:text-xl">Kayıtlı Cihazlar (Filo Durumu)</h2>
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-slate-100 mb-2">Cihaz Yönetimi</h1>
+        <p className="text-slate-400 text-sm">Sensör cihazları ve hayvan atamaları</p>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {devices
           .filter(dev => 
             dev.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -164,29 +164,33 @@ const DevicesView = () => {
             <div 
               key={dev.mac} 
               onClick={() => handleSelectDevice(dev.mac)}
-              className="bg-opacity-3 border border-cyber-purple border-opacity-20 rounded-xl p-6 relative cursor-pointer transition-transform hover:scale-105 hover:bg-opacity-5"
+              className="bg-slate-800 border border-slate-700 rounded-xl p-5 cursor-pointer transition-all hover:bg-slate-700/50 hover:border-indigo-500/50 group"
             >
-              <div className="text-xs text-cyber-gray tracking-widest">CİHAZ ADI</div>
-              <div className="text-xl text-white font-bold my-1">{dev.name || dev.mac}</div>
+              <div className="flex justify-between items-start mb-3">
+                <div className="text-xs text-slate-400 tracking-widest">CİHAZ</div>
+                <div className="text-2xl opacity-20 group-hover:opacity-40 transition-opacity">📡</div>
+              </div>
+              
+              <div className="text-lg text-slate-100 font-bold mb-2 break-all">{dev.name || dev.mac}</div>
+              
+              <div className="text-xs text-slate-400 font-mono mb-3">{dev.mac}</div>
               
               {dev.animal ? (
-                <div className="space-y-1">
-                  <div className="text-sm text-cyber-green my-1">🐄 {dev.animal.ear_tag}</div>
+                <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3 mb-3">
+                  <div className="text-xs text-emerald-400 mb-1">ATANMIŞ HAYVAN</div>
+                  <div className="text-slate-100 font-semibold">🐄 {dev.animal.ear_tag}</div>
                   {dev.animal.name && (
-                    <div className="text-xs text-gray-400">{dev.animal.name}</div>
+                    <div className="text-xs text-slate-400">{dev.animal.name}</div>
                   )}
                 </div>
               ) : (
-                <div className="text-sm text-gray-500 my-1">Hayvan atanmamış</div>
+                <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-3 mb-3">
+                  <div className="text-xs text-amber-400 mb-1">ATANMAMIŞ</div>
+                  <div className="text-slate-300 text-sm">Hayvan eşleştirilmedi</div>
+                </div>
               )}
-              
-              {dev.location && (
-                <div className="text-xs text-cyber-green opacity-80 my-1">📍 {dev.location}</div>
-              )}
-              
-              <div className="h-px bg-white bg-opacity-5 my-3" />
-              
-              {/* Activity Status Display */}
+
+              {/* Activity Status */}
               {(() => {
                 const mac = dev.mac_address || dev.mac;
                 const activity = activityStatuses[mac]?.final_activity || 'Durağan / Ayakta';
@@ -194,9 +198,9 @@ const DevicesView = () => {
                 const color = getActivityColor(activity);
                 return (
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="text-xs text-gray-400">DURUM:</span>
+                    <span className="text-xs text-slate-400">DURUM:</span>
                     <span
-                      className="text-sm font-semibold px-2 py-1 rounded"
+                      className="text-xs font-semibold px-2 py-1 rounded"
                       style={{
                         color,
                         backgroundColor: `${color}20`,
@@ -208,23 +212,23 @@ const DevicesView = () => {
                   </div>
                 );
               })()}
-              
-              <div className="flex justify-between items-center">
+
+              <div className="flex justify-between items-center pt-3 border-t border-slate-700">
                 <div>
-                  <div className="text-xs text-cyber-green tracking-wide">TOPLAM ADIM</div>
-                  <div className="text-2xl text-cyber-green font-bold">{dev.total_steps}</div>
+                  <div className="text-xs text-slate-400">TOPLAM ADIM</div>
+                  <div className="text-xl text-indigo-400 font-bold">{dev.total_steps?.toLocaleString() || 0}</div>
                 </div>
-                <div className="text-4xl opacity-20">🏃</div>
+                <div className="text-2xl opacity-30">🏃</div>
               </div>
 
               {/* Assignment Button */}
-              <div className="mt-4 pt-3 border-t border-gray-700">
+              <div className="mt-4">
                 <button
                   onClick={(e) => toggleAssignDropdown(e, dev.mac)}
                   className={`w-full px-3 py-2 text-sm font-semibold rounded transition-colors ${
                     dev.animal 
-                      ? 'bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-500 border border-yellow-600/50' 
-                      : 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-600/50'
+                      ? 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-600/50' 
+                      : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-600/50'
                   }`}
                 >
                   {dev.animal ? 'Hayvanı Değiştir' : 'Hayvan Eşleştir'}
@@ -232,30 +236,30 @@ const DevicesView = () => {
 
                 {showAssignDropdown === dev.mac && (
                   <div 
-                    className="absolute left-0 right-0 mt-2 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-10 max-h-60 overflow-y-auto"
+                    className="absolute left-4 right-4 md:left-auto md:right-4 md:w-80 mt-2 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-10 max-h-60 overflow-y-auto"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="p-2">
-                      <div className="text-xs text-gray-400 px-2 py-1">Hayvan Seçiniz:</div>
+                    <div className="p-3">
+                      <div className="text-xs text-slate-400 mb-2">Hayvan Seçiniz:</div>
                       {getAvailableAnimals(dev).length === 0 ? (
-                        <div className="text-sm text-gray-500 px-2 py-2">Uygun hayvan yok</div>
+                        <div className="text-sm text-slate-500 py-2">Uygun hayvan yok</div>
                       ) : (
                         getAvailableAnimals(dev).map(animal => (
                           <button
                             key={animal.id}
                             onClick={() => handleAssignAnimal(dev.mac, animal.ear_tag)}
                             disabled={assigning === dev.mac}
-                            className="w-full text-left px-3 py-2 hover:bg-gray-700 rounded text-sm text-white transition-colors disabled:opacity-50"
+                            className="w-full text-left px-3 py-2 hover:bg-slate-700 rounded text-sm text-slate-100 transition-colors disabled:opacity-50 mb-1 last:mb-0"
                           >
                             <div className="font-semibold">{animal.ear_tag}</div>
-                            {animal.name && <div className="text-xs text-gray-400">{animal.name}</div>}
+                            {animal.name && <div className="text-xs text-slate-400">{animal.name}</div>}
                           </button>
                         ))
                       )}
                       {dev.animal && (
                         <button
                           onClick={() => handleUnassign(dev.mac)}
-                          className="w-full text-left px-3 py-2 hover:bg-red-900/30 rounded text-sm text-red-400 transition-colors mt-1 border-t border-gray-700 pt-2"
+                          className="w-full text-left px-3 py-2 hover:bg-rose-900/30 rounded text-sm text-rose-400 transition-colors mt-2 border-t border-slate-700 pt-2"
                         >
                           ↔️ Atamayı Kaldır
                         </button>
@@ -268,7 +272,7 @@ const DevicesView = () => {
           ))}
         
         {devices.length === 0 && (
-          <div className="col-span-full text-center py-12 text-cyber-gray">
+          <div className="col-span-full text-center py-12 text-slate-400">
             Henüz veritabanına kayıtlı cihaz yok...
           </div>
         )}
@@ -279,7 +283,7 @@ const DevicesView = () => {
           (dev.animal?.ear_tag?.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (dev.animal?.name?.toLowerCase().includes(searchQuery.toLowerCase()))
         ).length === 0 && (
-          <div className="col-span-full text-center py-12 text-cyber-gray">
+          <div className="col-span-full text-center py-12 text-slate-400">
             "{searchQuery}" için cihaz bulunamadı
           </div>
         )}

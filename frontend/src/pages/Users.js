@@ -8,7 +8,7 @@ import axios from 'axios';
 const Users = () => {
   const { isAuthenticated, userRole } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('users'); // 'users' veya 'permissions'
+  const [activeTab, setActiveTab] = useState('users');
   
   // Users state
   const [users, setUsers] = useState([]);
@@ -29,7 +29,6 @@ const Users = () => {
       navigate('/login');
       return;
     }
-    // Allow if user is ADMIN, otherwise check for specific permission
     if (userRole !== 'ADMIN' && !canManageUsers) {
       navigate('/');
       return;
@@ -96,7 +95,7 @@ const Users = () => {
 
   // --- Permissions Handlers ---
   const togglePermission = (roleKey, permKey) => {
-    if (roleKey === 'ADMIN') return; // Admin locked
+    if (roleKey === 'ADMIN') return;
     
     setRolesData(prev => ({
       ...prev,
@@ -136,38 +135,37 @@ const Users = () => {
 
   const getRoleBadgeClass = (role) => {
     switch (role) {
-      case 'ADMIN': return 'bg-purple-900/50 text-purple-300 border-purple-500';
-      case 'VET': return 'bg-blue-900/50 text-blue-300 border-blue-500';
-      default: return 'bg-gray-700 text-gray-300 border-gray-500';
+      case 'ADMIN': return 'bg-purple-900/50 text-purple-300 border border-purple-500/40';
+      case 'VET': return 'bg-blue-900/50 text-blue-300 border border-blue-500/40';
+      default: return 'bg-slate-700 text-slate-300 border border-slate-600';
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-cyber-dark">
-         <div className="w-12 h-12 border-t-2 border-cyber-green rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+         <div className="w-12 h-12 border-t-2 border-indigo-500 rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6"> 
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6"> 
       
       {/* Header and Tabs */}
-      
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">👥 Sistem Yönetimi</h1>
-          <div className="flex gap-4 border-b border-cyber-gray/20 overflow-x-auto pb-1">
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-100 mb-2">👥 Sistem Yönetimi</h1>
+          <div className="flex gap-4 border-b border-slate-700 overflow-x-auto pb-1">
             <button
               onClick={() => setActiveTab('users')}
-              className={`pb-2 text-lg font-semibold transition-colors whitespace-nowrap ${activeTab === 'users' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
+              className={`pb-2 text-lg font-semibold transition-colors whitespace-nowrap ${activeTab === 'users' ? 'text-indigo-400 border-b-2 border-indigo-400' : 'text-slate-400 hover:text-slate-100'}`}
             >
               Kullanıcılar
             </button>
             <button
               onClick={() => setActiveTab('permissions')}
-              className={`pb-2 text-lg font-semibold transition-colors whitespace-nowrap ${activeTab === 'permissions' ? 'text-cyber-green border-b-2 border-cyber-green' : 'text-cyber-gray hover:text-white'}`}
+              className={`pb-2 text-lg font-semibold transition-colors whitespace-nowrap ${activeTab === 'permissions' ? 'text-indigo-400 border-b-2 border-indigo-400' : 'text-slate-400 hover:text-slate-100'}`}
             >
               Roller & İzinler
             </button>
@@ -177,7 +175,7 @@ const Users = () => {
         {activeTab === 'users' && (
           <button
             onClick={() => setShowModal(true)}
-            className="bg-cyber-green text-black px-4 py-2 rounded-xl font-bold hover:bg-green-500 transition shadow-lg shadow-cyber-green/20"
+            className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition-colors"
           >
             + Yeni Kullanıcı
           </button>
@@ -185,66 +183,68 @@ const Users = () => {
       </div>
 
       {message.text && (
-        <div className={`p-4 rounded-xl border ${message.type === 'success' ? 'bg-green-900/40 border-green-500 text-green-300' : 'bg-red-900/40 border-red-500 text-red-300'}`}>
+        <div className={`p-4 rounded-lg ${message.type === 'success' ? 'bg-emerald-900/30 border border-emerald-500/50 text-emerald-200' : 'bg-rose-900/30 border border-rose-500/50 text-rose-200'}`}>
           {message.text}
         </div>
       )}
 
       {/* TABS CONTENT */}
       {activeTab === 'users' ? (
-        <div className="bg-cyber-dark/80 border border-cyber-green/20 rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
           {/* Desktop Table */}
-          <table className="w-full text-left text-sm hidden md:table">
-            <thead className="bg-cyber-darkBlue/80 text-cyber-green">
-              <tr>
-                <th className="px-6 py-4">Kullanıcı Adı</th>
-                <th className="px-6 py-4">E-posta</th>
-                <th className="px-6 py-4">Rol</th>
-                <th className="px-6 py-4 text-right">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cyber-gray/10 text-white">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-cyber-darkBlue/40">
-                  <td className="px-6 py-4 font-mono">{user.username}</td>
-                  <td className="px-6 py-4 text-cyber-gray">{user.email || '-'}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs border ${getRoleBadgeClass(user.role)}`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right flex justify-end gap-2">
-                    <select
-                      value={user.role}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
-                      className="bg-cyber-dark border border-cyber-gray/30 rounded px-2 py-1 focus:border-cyber-green outline-none disabled:opacity-50"
-                    >
-                      <option value="ADMIN">ADMIN</option>
-                      <option value="VET">VETERİNER</option>
-                      <option value="WORKER">İŞÇİ</option>
-                    </select>
-                    <button
-                      onClick={() => handleDeleteUser(user.id, user.username)}
-                      disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
-                      className="bg-red-900/50 hover:bg-red-600 text-white px-3 py-1 rounded disabled:opacity-50 transition"
-                    >
-                      Sil
-                    </button>
-                  </td>
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-700/50">
+                <tr>
+                  <th className="px-6 py-4 text-slate-200 font-semibold">Kullanıcı Adı</th>
+                  <th className="px-6 py-4 text-slate-200 font-semibold">E-posta</th>
+                  <th className="px-6 py-4 text-slate-200 font-semibold">Rol</th>
+                  <th className="px-6 py-4 text-slate-200 font-semibold text-right">İşlemler</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {users.map((user) => (
+                  <tr key={user.id} className="hover:bg-slate-700/30 transition-colors">
+                    <td className="px-6 py-4 font-mono text-slate-100">{user.username}</td>
+                    <td className="px-6 py-4 text-slate-300">{user.email || '-'}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs border ${getRoleBadgeClass(user.role)}`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right flex gap-2 justify-end">
+                      <select
+                        value={user.role}
+                        onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                        disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
+                        className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                      >
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="VET">VETERİNER</option>
+                        <option value="WORKER">İŞÇİ</option>
+                      </select>
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.username)}
+                        disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
+                        className="bg-rose-900/50 hover:bg-rose-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50 transition-colors"
+                      >
+                        Sil
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {/* Mobile Card View */}
           <div className="md:hidden p-4 space-y-4">
             {users.map((user) => (
-              <div key={user.id} className="bg-cyber-darkBlue/40 border border-cyber-gray/20 rounded-xl p-4 space-y-3">
+              <div key={user.id} className="bg-slate-700/40 border border-slate-600/20 rounded-xl p-4 space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-mono text-white font-semibold">{user.username}</p>
-                    <p className="text-sm text-cyber-gray">{user.email || '-'}</p>
+                    <p className="font-mono text-slate-100 font-semibold">{user.username}</p>
+                    <p className="text-sm text-slate-300">{user.email || '-'}</p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-xs border ${getRoleBadgeClass(user.role)}`}>
                     {user.role}
@@ -255,7 +255,7 @@ const Users = () => {
                     value={user.role}
                     onChange={(e) => handleRoleChange(user.id, e.target.value)}
                     disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
-                    className="flex-1 bg-cyber-dark border border-cyber-gray/30 rounded px-2 py-1 text-sm focus:border-cyber-green outline-none disabled:opacity-50"
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
                   >
                     <option value="ADMIN">ADMIN</option>
                     <option value="VET">VETERİNER</option>
@@ -264,7 +264,7 @@ const Users = () => {
                   <button
                     onClick={() => handleDeleteUser(user.id, user.username)}
                     disabled={user.username === 'superadmin' || user.username === 'bidirabinizz'}
-                    className="bg-red-900/50 hover:bg-red-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50 transition"
+                    className="bg-rose-900/50 hover:bg-rose-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50 transition-colors"
                   >
                     Sil
                   </button>
@@ -275,19 +275,19 @@ const Users = () => {
         </div>
       ) : (
         /* PERMISSIONS TAB */
-        <div className="space-y-8">
-          <p className="text-cyber-gray text-sm">Alt kademedeki rollerin (Veteriner, İşçi) neyi görebileceğini ve yapabileceğini buradan ayarlayabilirsiniz. Admin rolünün tüm izinleri kalıcı olarak açıktır.</p>
+        <div className="space-y-6">
+          <p className="text-slate-400 text-sm">Alt kademedeki rollerin (Veteriner, İşçi) neyi görebileceğini ve yapabileceğini buradan ayarlayabilirsiniz. Admin rolünün tüm izinleri kalıcı olarak açıktır.</p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {rolesData && Object.entries(rolesData).map(([roleKey, roleInfo]) => (
-              <div key={roleKey} className={`bg-cyber-dark/60 border rounded-2xl p-6 ${roleKey==='ADMIN' ? 'border-purple-500/50 shadow-lg shadow-purple-500/10 opacity-70' : 'border-cyber-green/30 shadow-lg shadow-cyber-green/10'}`}>
+              <div key={roleKey} className={`bg-slate-800/60 border rounded-xl p-6 ${roleKey==='ADMIN' ? 'border-purple-500/40 opacity-70' : 'border-indigo-500/30'}`}>
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-bold text-white">{roleInfo.label}</h3>
+                  <h3 className="text-xl font-bold text-slate-100">{roleInfo.label}</h3>
                   {roleKey !== 'ADMIN' && (
                     <button 
                       onClick={() => handleSavePermissions(roleKey)}
                       disabled={savingPerms}
-                      className="bg-cyber-green/20 hover:bg-cyber-green/40 text-cyber-green border border-cyber-green/50 px-3 py-1 rounded text-sm transition"
+                      className="bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/50 px-3 py-1 rounded text-sm transition-colors"
                     >
                       {savingPerms ? 'Kaydediliyor...' : 'Kaydet'}
                     </button>
@@ -296,8 +296,8 @@ const Users = () => {
                 
                 <div className="space-y-3">
                   {Object.entries(roleInfo.permissions).map(([permKey, permVal]) => (
-                    <label key={permKey} className="flex items-center justify-between p-2 hover:bg-cyber-darkBlue/40 rounded cursor-pointer transition">
-                      <span className="text-sm text-cyber-lightGray">{permVal.label}</span>
+                    <label key={permKey} className="flex items-center justify-between p-2 hover:bg-slate-700/40 rounded cursor-pointer transition-colors">
+                      <span className="text-sm text-slate-300">{permVal.label}</span>
                       <div className="relative inline-block w-10 mr-2 align-middle select-none">
                         <input 
                           type="checkbox" 
@@ -307,10 +307,10 @@ const Users = () => {
                           disabled={permVal.locked}
                           style={{
                                 right: permVal.allowed ? '0' : '1.25rem',
-                                borderColor: permVal.allowed ? (roleKey === 'ADMIN' ? '#A855F7' : '#00ff9d') : '#4B5563',
+                                borderColor: permVal.allowed ? (roleKey === 'ADMIN' ? '#a855f7' : '#10b981') : '#4b5563',
                           }}
                         />
-                        <div className={`toggle-label block overflow-hidden h-5 rounded-full ${permVal.allowed ? (roleKey === 'ADMIN' ? 'bg-purple-500/30' : 'bg-cyber-green/30') : 'bg-gray-700'}`}></div>
+                        <div className={`toggle-label block overflow-hidden h-5 rounded-full ${permVal.allowed ? (roleKey === 'ADMIN' ? 'bg-purple-500/30' : 'bg-emerald-500/30') : 'bg-slate-600'}`}></div>
                       </div>
                     </label>
                   ))}
@@ -324,28 +324,32 @@ const Users = () => {
       {/* Add User Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-cyber-dark border border-cyber-green/30 rounded-2xl shadow-2xl p-4 md:p-8 w-[95%] max-w-lg">
-            <h2 className="text-2xl font-bold text-white mb-6">Yeni Kullanıcı</h2>
+          <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-lg p-4 md:p-6 w-full max-w-lg">
+            <h2 className="text-xl font-bold text-slate-100 mb-6">Yeni Kullanıcı</h2>
             <form onSubmit={handleUserSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm text-cyber-gray mb-1">Kullanıcı Adı *</label>
-                <input required type="text" className="w-full bg-cyber-darkBlue border border-cyber-gray/30 rounded-lg p-2.5 text-white outline-none focus:border-cyber-green" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
+                <label className="block text-sm text-slate-300 mb-1">Kullanıcı Adı *</label>
+                <input required type="text" className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
               </div>
               <div>
-                <label className="block text-sm text-cyber-gray mb-1">Şifre *</label>
-                <input required type="password" className="w-full bg-cyber-darkBlue border border-cyber-gray/30 rounded-lg p-2.5 text-white outline-none focus:border-cyber-green" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+                <label className="block text-sm text-slate-300 mb-1">E-posta</label>
+                <input required type="email" className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
               </div>
               <div>
-                <label className="block text-sm text-cyber-gray mb-1">Rol</label>
-                <select className="w-full bg-cyber-darkBlue border border-cyber-gray/30 rounded-lg p-2.5 text-white outline-none focus:border-cyber-green" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}>
+                <label className="block text-sm text-slate-300 mb-1">Şifre *</label>
+                <input required type="password" className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">Rol</label>
+                <select className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}>
                   <option value="ADMIN">ADMIN</option>
                   <option value="VET">VETERİNER</option>
                   <option value="WORKER">İŞÇİ</option>
                 </select>
               </div>
-              <div className="flex gap-3 pt-4 border-t border-cyber-gray/20">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-cyber-gray hover:text-white flex-1">İptal</button>
-                <button type="submit" className="bg-cyber-green hover:bg-green-500 text-black font-bold px-4 py-2 rounded-lg flex-1">Kaydet</button>
+              <div className="flex gap-3 pt-4 border-t border-slate-700">
+                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 text-slate-300 hover:text-slate-100">İptal</button>
+                <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg">Kaydet</button>
               </div>
             </form>
           </div>

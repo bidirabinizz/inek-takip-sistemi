@@ -12,6 +12,7 @@ import Users from './pages/Users';
 import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import Paddocks from './pages/Paddocks';
+import PaddockDetail from './pages/PaddockDetail';
 import Breeding from './pages/Breeding';
 
 function AppContent() {
@@ -27,10 +28,10 @@ function AppContent() {
   }
 
   return (
-    <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-mono`}>
+    <div className={`${theme === 'dark' ? 'dark' : ''} min-h-screen bg-slate-900 text-slate-100 font-sans`}>
       <div className="flex">
         {isAuthenticated && <Navbar />}
-        <main className="flex-1 md:ml-64 p-6 min-h-screen">
+        <main className="flex-1 md:ml-64 p-4 md:p-6 min-h-screen">
           <Routes>
             <Route
               path="/"
@@ -69,6 +70,14 @@ function AppContent() {
               element={
                 <ProtectedRoute requiredPermission="view_paddocks">
                   <Paddocks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/paddocks/:id"
+              element={
+                <ProtectedRoute requiredPermission="view_paddocks">
+                  <PaddockDetail />
                 </ProtectedRoute>
               }
             />
