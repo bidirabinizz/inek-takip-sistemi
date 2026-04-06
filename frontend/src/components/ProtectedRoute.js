@@ -1,30 +1,12 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { usePermission } from '../hooks/usePermission';
 
-const ProtectedRoute = ({ children, requiredPermission }) => {
-  const { isAuthenticated, loading } = useAuth();
-  const location = useLocation();
-  const hasPermission = usePermission(requiredPermission);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
-        <div className="text-white text-xl">Yükleniyor...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (requiredPermission && !hasPermission) {
-    return <Navigate to="/" replace />;
-  }
-
-  return children;
-};
-
-export default ProtectedRoute;
+export default function ProtectedRoute({ children }) {
+    const { isAuthenticated, loading } = useAuth();
+    
+    if (loading) return <div className="p-10 text-center text-emerald-400">Yükleniyor...</div>;
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    
+    return children;
+}

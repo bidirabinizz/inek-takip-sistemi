@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const LoginForm = () => {
@@ -8,19 +9,30 @@ const LoginForm = () => {
     const [loading, setLoading] = useState(false);
     
     const { login } = useAuth();
+    const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
+    e.preventDefault();
+    setError('');
+    setLoading(true);
 
+    try {
+        console.log("Giriş isteği gönderiliyor...");
         const result = await login(username, password);
+        console.log("İstek sonucu:", result);
 
-        if (!result.success) {
+        if (result.success) {
+            navigate('/', { replace: true });
+        } else {
             setError(result.message);
         }
-        setLoading(false);
-    };
+    } catch (err) {
+        console.error("Login hatası:", err);
+        setError("Sunucuya bağlanılamadı. Lütfen API URL'sini ve internetinizi kontrol edin.");
+    } finally {
+        setLoading(false); // Hata olsa da olmasa da yükleme durumunu kapat
+    }
+};
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyber-dark via-sky-300 to-cyber-darkBlue">

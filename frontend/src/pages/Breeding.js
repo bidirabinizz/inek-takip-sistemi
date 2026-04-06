@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE } from '../config';
 import { usePermission } from '../hooks/usePermission';
+import { useAuth } from '../context/AuthContext';
 import { PlusIcon, EyeIcon, CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 
 const Breeding = () => {
@@ -17,7 +18,9 @@ const Breeding = () => {
     // Status Update Modal state
     const [statusModal, setStatusModal] = useState({ isOpen: false, id: null });
     
+    const { userRole } = useAuth();
     const canManageBreeding = usePermission('manage_breeding');
+    const hasAccess = userRole === 'ADMIN' || canManageBreeding;
 
     useEffect(() => {
         fetchData();
@@ -31,7 +34,8 @@ const Breeding = () => {
             ]);
             setInseminations(insRes.data.results);
             setSummary(insRes.data.summary);
-            setAnimals(animalsRes.data.filter(a => a.is_active && a.gender === 'Female'));
+            const animalsList = animalsRes.data.results || animalsRes.data;
+            setAnimals(animalsList.filter(a => a.is_active && a.gender === 'Female'));
         } catch (err) {
             console.error("Dölleme verileri çekilemedi:", err);
         } finally {
@@ -83,7 +87,7 @@ const Breeding = () => {
                     </h1>
                     <p className="text-cyber-gray mt-2">İneklerin dölleme işlemleri ve gebelik 21/28 gün döngüsü</p>
                 </div>
-                {canManageBreeding && (
+                {hasAccess && (
                     <button 
                         onClick={() => setIsModalOpen(true)}
                         className="bg-gradient-to-r from-cyber-green to-green-500 hover:to-green-400 text-black px-5 py-2.5 rounded-xl flex items-center gap-2 font-bold shadow-lg shadow-cyber-green/20 transition-all hover:scale-105"
@@ -164,7 +168,7 @@ const Breeding = () => {
                                         ) : '-'}
                                     </td>
                                     <td className="px-6 py-4 text-right space-x-2">
-                                        {canManageBreeding && ins.status === 'PENDING' && (
+                                        {(userRole === 'ADMIN' || canManageBreeding) && ins.status === 'PENDING' && (
                                             <button 
                                                 onClick={() => setStatusModal({ isOpen: true, id: ins.id })}
                                                 className="bg-cyber-dark border border-cyber-green text-cyber-green hover:bg-cyber-green hover:text-black px-4 py-1.5 rounded-lg text-xs font-bold transition-all"

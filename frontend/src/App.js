@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppContext, AppProvider } from './context/AppContext';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
@@ -31,77 +31,76 @@ function AppContent() {
       <div className="app-container">
         {isAuthenticated && <Navbar />}
         <main className="pt-2">
-          {isAuthenticated ? (
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute requiredPermission="view_dashboard">
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/devices"
-                element={
-                  <ProtectedRoute requiredPermission="view_devices">
-                    <DevicesView />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/report/:mac"
-                element={
-                  <ProtectedRoute requiredPermission="view_reports">
-                    <DeviceReport />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/animals"
-                element={
-                  <ProtectedRoute requiredPermission="view_animals">
-                    <Animals />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/paddocks"
-                element={
-                  <ProtectedRoute requiredPermission="view_paddocks">
-                    <Paddocks />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/breeding"
-                element={
-                  <ProtectedRoute requiredPermission="view_breeding">
-                    <Breeding />
-                  </ProtectedRoute>
-                }
-              />
-              
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute requiredPermission="manage_settings">
-                    <Settings />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/users"
-                element={
-                  <ProtectedRoute requiredPermission="manage_users">
-                    <Users />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          ) : (
-            <LoginForm />
-          )}
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute requiredPermission="view_dashboard">
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/devices"
+              element={
+                <ProtectedRoute requiredPermission="view_devices">
+                  <DevicesView />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/report/:mac"
+              element={
+                <ProtectedRoute requiredPermission="view_reports">
+                  <DeviceReport />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/animals"
+              element={
+                <ProtectedRoute requiredPermission="view_animals">
+                  <Animals />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/paddocks"
+              element={
+                <ProtectedRoute requiredPermission="view_paddocks">
+                  <Paddocks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/breeding"
+              element={
+                <ProtectedRoute requiredPermission="view_breeding">
+                  <Breeding />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute requiredPermission="manage_settings">
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute requiredPermission="manage_users">
+                  <Users />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/login"
+              element={isAuthenticated ? <Navigate to="/" replace /> : <LoginForm />}
+            />
+          </Routes>
         </main>
       </div>
     </div>

@@ -12,6 +12,15 @@ import KPICard from '../components/KPICard';
 import AlarmTable from '../components/AlarmTable';
 import { API_BASE } from '../config';
 
+// Helper: Calculate standard deviation
+const calculateStdDev = (values) => {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const squaredDiffs = values.map(v => (v - mean) ** 2);
+  const variance = squaredDiffs.reduce((a, b) => a + b, 0) / values.length;
+  return Math.sqrt(variance);
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -37,14 +46,34 @@ export default function Dashboard() {
   const [selectedDevice,   setSelectedDevice]   = useState("");
   const [summaryData,      setSummaryData]      = useState(null);
   const [alarmDevices,     setAlarmDevices]     = useState([]);
+  const [stillnessTimer,   setStillnessTimer]   = useState(0); // seconds
+  const [isStill,          setIsStill]          = useState(false);
 
   const selectedDeviceRef  = useRef("");
   const lastFetchedTimeRef = useRef(null);
   const wsRef = useRef(null);
+  const stillnessTimerRef = useRef(null);
+  const stillnessStartTimeRef = useRef(null);
 
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  // Live stillness timer updater
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (isStill && stillnessStartTimeRef.current) {
+        const elapsed = Math.floor((Date.now() - stillnessStartTimeRef.current) / 1000);
+        setStillnessTimer(elapsed);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isStill]);
+
+  // Reset timer when device changes
+  useEffect(() => {
+    resetStillnessTimer();
+  }, [selectedDevice]);
 
   const fetchSummary = useCallback(async () => {
     try {
@@ -78,10 +107,44 @@ export default function Dashboard() {
     lastFetchedTimeRef.current = null;
   }, []);
 
+  const resetStillnessTimer = useCallback(() => {
+    setStillnessTimer(0);
+    setIsStill(false);
+    stillnessStartTimeRef.current = null;
+  }, []);
+
+  const checkStillness = useCallback((mag, std) => {
+    const { STILL_STD_MAX, STILL_MAG_MIN, STILL_MAG_MAX, WALK_STD_MIN, LYING_STILL_MIN_MINUTES } = settings;
+    
+    // Check if current values are within "still" range
+    const isStillRange = std <= STILL_STD_MAX && mag >= STILL_MAG_MIN && mag <= STILL_MAG_MAX;
+    const isMoving = std > WALK_STD_MIN;
+
+    if (isMoving) {
+      // Movement detected - reset timer
+      resetStillnessTimer();
+      return;
+    }
+
+    if (isStillRange) {
+      if (!isStill) {
+        // Just entered stillness - start timer
+        setIsStill(true);
+        stillnessStartTimeRef.current = Date.now();
+        setStillnessTimer(0);
+      }
+      // Timer will update via interval
+    } else {
+      // Outside still range but not moving - reset timer
+      resetStillnessTimer();
+    }
+  }, [settings, isStill, resetStillnessTimer]);
+
   const fetchDeviceNames = useCallback(async () => {
     try {
       const data = await fetchDeviceNamesData();
-      setAvailableDevicesData(data);
+      // Ensure we extract the array from the paginated response
+      setAvailableDevicesData(data.results || data || []);
     } catch (err) { console.error("İsim çekme hatası:", err); }
   }, []);
 
@@ -146,8 +209,17 @@ export default function Dashboard() {
         return [...prev, ...pts].slice(-300);
       });
 
+      // Check stillness on the latest data point
+      if (sorted.length > 0) {
+        const latest = sorted[sorted.length - 1];
+        const mag = Math.sqrt(latest.x**2 + latest.y**2 + latest.z**2);
+        // Calculate std dev from the three axes
+        const std = calculateStdDev([latest.x, latest.y, latest.z]);
+        checkStillness(mag, std);
+      }
+
     } catch (err) { setStatus("error"); }
-  }, [handleDeviceChange]);
+  }, [handleDeviceChange, checkStillness]);
 
   // WebSocket bağlantısı kur
   useEffect(() => {
@@ -201,6 +273,11 @@ export default function Dashboard() {
                   };
                   return [...prev, newPoint].slice(-300);
                 });
+
+                // Check stillness on WebSocket data
+                const mag = Math.sqrt(data.x**2 + data.y**2 + data.z**2);
+                const std = calculateStdDev([data.x, data.y, data.z]);
+                checkStillness(mag, std);
               }
             }
           }
@@ -236,16 +313,23 @@ export default function Dashboard() {
         wsRef.current = null;
       }
     };
-  }, [handleDeviceChange]);
+  }, [handleDeviceChange, checkStillness]);
 
-  // İlk veri çekme (cihaz isimleri için)
+  // İlk veri çekme (cihaz isimleri ve ilk grafik verisi için)
   useEffect(() => {
     fetchDeviceNames();
-  }, [fetchDeviceNames]);
+    fetchData(); // Grafik için ilk veriyi yükle
+  }, [fetchDeviceNames, fetchData, selectedDevice]);
 
 
-  const statusColor = status === "live" ? "#00ffb4" : status === "error" ? "#ff4d6d" : "#f0c040";
-  const statusLabel = status === "live" ? "CANLI" : status === "error" ? "HATA" : "BAĞLANIYOR";
+  // Determine if animal is in sleep state based on stillness timer
+  const sleepThresholdSeconds = settings.LYING_STILL_MIN_MINUTES * 60;
+  const isSleeping = isStill && stillnessTimer >= sleepThresholdSeconds;
+  
+  // Update status label and color to include sleep state
+  const displayStatus = isSleeping ? "sleeping" : status;
+  const displayStatusColor = isSleeping ? "#8b5cf6" : status === "live" ? "#00ffb4" : status === "error" ? "#ff4d6d" : "#f0c040";
+  const displayStatusLabel = isSleeping ? "UYKUDA" : status === "live" ? "CANLI" : status === "error" ? "HATA" : "BAĞLANIYOR";
 
   return (
     <>
@@ -295,11 +379,42 @@ export default function Dashboard() {
           <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-full">
             <div
               className="w-2 h-2 rounded-full"
-              style={{ background: statusColor, boxShadow: `0 0 8px ${statusColor}`, animation: status === "live" ? "pulse 1.5s infinite" : "none" }}
+              style={{ background: displayStatusColor, boxShadow: `0 0 8px ${displayStatusColor}`, animation: displayStatus === "live" ? "pulse 1.5s infinite" : "none" }}
             />
-            <span className="text-[11px] tracking-widest" style={{ color: statusColor }}>{statusLabel}</span>
+            <span className="text-[11px] tracking-widest" style={{ color: displayStatusColor }}>{displayStatusLabel}</span>
           </div>
         </header>
+
+        {/* Behavioral Sleep Timer Display */}
+        {isStill && (
+          <div className={`mb-4 px-4 py-3 rounded-xl border ${isSleeping ? 'bg-purple-900/30 border-purple-400/40' : 'bg-blue-900/20 border-blue-400/30'}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">{isSleeping ? '😴' : '🛏️'}</span>
+                <div>
+                  <div className="text-sm font-semibold text-slate-200">
+                    {isSleeping ? 'UYKUDA / YATIYOR' : 'Hareketsizlik Tespit Edildi'}
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    {isSleeping
+                      ? `Hayvan ${Math.floor(stillnessTimer / 60)} dakikadır ${stillnessTimer % 60} saniyedir hareketsiz`
+                      : `${stillnessTimer} saniyedir hareketsiz - ${settings.LYING_STILL_MIN_MINUTES} dk eşik değeri`}
+                  </div>
+                </div>
+              </div>
+              <div className={`text-2xl font-mono font-bold ${isSleeping ? 'text-purple-400' : 'text-blue-400'}`}>
+                {Math.floor(stillnessTimer / 60)}:{(stillnessTimer % 60).toString().padStart(2, '0')}
+              </div>
+            </div>
+            {/* Progress bar showing progress toward sleep threshold */}
+            <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ${isSleeping ? 'bg-purple-400' : 'bg-blue-400'}`}
+                style={{ width: `${Math.min((stillnessTimer / sleepThresholdSeconds) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
 
 
         <div className="my-4 md:my-6 bg-white/5 border border-emerald-400/10 rounded-xl pt-4 md:pt-6 px-4 pb-4">
@@ -315,20 +430,26 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="timeLabel" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={{ stroke: "rgba(255,255,255,0.06)" }} interval="preserveStartEnd" />
-              <YAxis domain={[0, 20]} tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} width={32} />
-              <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine y={settings.MAG_PEAK_THRESHOLD} stroke="#fbbf24" strokeDasharray="4 4" strokeOpacity={0.5} label={{ value: "PEAK", position: "insideTopRight", fontSize: 9, fill: "#fbbf24" }} />
-              <ReferenceLine y={settings.MAG_VALLEY_THRESHOLD} stroke="#f472b6" strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: "VALLEY", position: "insideBottomRight", fontSize: 9, fill: "#f472b6" }} />
-              <ReferenceLine y={settings.EXCITED_MAG} stroke="#f87171" strokeDasharray="6 3" strokeOpacity={0.3} label={{ value: "KIZGINLIK", position: "insideTopLeft", fontSize: 9, fill: "#f87171" }} />
-              <Line type="monotone" dataKey="rawMag" stroke="rgba(100,120,140,0.45)" strokeWidth={1} dot={false} isAnimationActive={false} name="Ham Mag" />
-              <Line type="monotone" dataKey="z" stroke="#7dd3fc" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Z" />
-              <Brush dataKey="timeLabel" height={25} stroke="#4a6070" fill="rgba(0,255,180,0.05)" travellerWidth={10} />
-            </LineChart>
-          </ResponsiveContainer>
+          {(!selectedDevice || chartData.length === 0) ? (
+            <div className="flex h-[300px] items-center justify-center text-slate-400 text-sm">
+              Grafik verisi bekleniyor veya cihaz seçilmedi...
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="timeLabel" tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={{ stroke: "rgba(255,255,255,0.06)" }} interval="preserveStartEnd" />
+                <YAxis domain={[0, 20]} tick={{ fontSize: 10, fill: "#4a6070" }} tickLine={false} axisLine={false} width={32} />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine y={settings.MAG_PEAK_THRESHOLD} stroke="#fbbf24" strokeDasharray="4 4" strokeOpacity={0.5} label={{ value: "PEAK", position: "insideTopRight", fontSize: 9, fill: "#fbbf24" }} />
+                <ReferenceLine y={settings.MAG_VALLEY_THRESHOLD} stroke="#f472b6" strokeDasharray="4 4" strokeOpacity={0.4} label={{ value: "VALLEY", position: "insideBottomRight", fontSize: 9, fill: "#f472b6" }} />
+                <ReferenceLine y={settings.EXCITED_MAG} stroke="#f87171" strokeDasharray="6 3" strokeOpacity={0.3} label={{ value: "KIZGINLIK", position: "insideTopLeft", fontSize: 9, fill: "#f87171" }} />
+                <Line type="monotone" dataKey="rawMag" stroke="rgba(100,120,140,0.45)" strokeWidth={1} dot={false} isAnimationActive={false} name="Ham Mag" />
+                <Line type="monotone" dataKey="z" stroke="#7dd3fc" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Z" />
+                <Brush dataKey="timeLabel" height={25} stroke="#4a6070" fill="rgba(0,255,180,0.05)" travellerWidth={10} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
     </>

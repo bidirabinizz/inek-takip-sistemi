@@ -29,12 +29,13 @@ const Users = () => {
       navigate('/login');
       return;
     }
-    if (!canManageUsers) {
+    // Allow if user is ADMIN, otherwise check for specific permission
+    if (userRole !== 'ADMIN' && !canManageUsers) {
       navigate('/');
       return;
     }
     fetchData();
-  }, [isAuthenticated, canManageUsers, navigate]);
+  }, [isAuthenticated, canManageUsers, userRole, navigate]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -97,11 +98,19 @@ const Users = () => {
   const togglePermission = (roleKey, permKey) => {
     if (roleKey === 'ADMIN') return; // Admin locked
     
-    setRolesData(prev => {
-      const newData = { ...prev };
-      newData[roleKey].permissions[permKey].allowed = !newData[roleKey].permissions[permKey].allowed;
-      return newData;
-    });
+    setRolesData(prev => ({
+      ...prev,
+      [roleKey]: {
+        ...prev[roleKey],
+        permissions: {
+          ...prev[roleKey].permissions,
+          [permKey]: {
+            ...prev[roleKey].permissions[permKey],
+            allowed: !prev[roleKey].permissions[permKey].allowed
+          }
+        }
+      }
+    }));
   };
 
   const handleSavePermissions = async (roleKey) => {

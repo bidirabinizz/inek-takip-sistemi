@@ -20,6 +20,9 @@ const char* ssid      = "OpenMindSoft";
 const char* password  = "OpEnMiNdSoFt";
 const char* serverUrl = "http://192.168.170.6:8000/api/gercek-sensor/";
 
+static char deviceMac[18] = "BILINMEYEN";  // WiFi bağlanınca doldurulacak
+RTC_DATA_ATTR char rtc_mac[18] = "";
+
 #define UPLOAD_INTERVAL_SEC    40   // 10 dakika
 #define NTP_SERVER             "pool.ntp.org"
 
@@ -70,7 +73,7 @@ void setup() {
   if (!LittleFS.begin(true)) {
     Serial.println("[HATA] LittleFS başlatılamadı!");
   }
-
+  
   // ─── Saat Senkronizasyonu ─────────────────────────────
   if (!rtc_time_synced) {
     Serial.println("[SAAT] Saat henüz senkronize edilmedi, deneniyor...");
@@ -105,6 +108,11 @@ void setup() {
     rtc_last_upload_time = current_time;
   }
 
+  if (strlen(rtc_mac) > 0) {
+  strncpy(deviceMac, rtc_mac, sizeof(deviceMac));
+  Serial.printf("[MAC] RTC'den alındı: %s\n", deviceMac);
+  }
+  
   // ─── Sensör Başlat ────────────────────────────────────
   pinMode(INT1_PIN, INPUT);
   Wire.begin(I2C_SDA, I2C_SCL);
@@ -190,9 +198,9 @@ void setup() {
 
         char item[200];
         snprintf(item, sizeof(item),
-                 "{\"mac\":\"ESP32_MOBIL\",\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
-                 "\"rssi\":-55,\"zaman\":\"%s\"}\n",
-                 ax, ay, az, timeStr);
+         "{\"mac\":\"%s\",\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
+         "\"rssi\":-55,\"zaman\":\"%s\"}\n",
+         deviceMac, ax, ay, az, timeStr);
 
         file.print(item);
         recorded_lines++;
@@ -327,7 +335,14 @@ bool connectWiFi() {
 
   if (WiFi.status() == WL_CONNECTED) {
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
+
+    // ── MAC adresini al ve kaydet ──────────────
+    String mac = WiFi.macAddress();
+    mac.toCharArray(deviceMac, sizeof(deviceMac));
+    strncpy(rtc_mac, deviceMac, sizeof(rtc_mac));  // ← RTC'ye yaz
     Serial.println("\n[WiFi] Bağlandı → " + WiFi.localIP().toString());
+    Serial.println("[WiFi] MAC → " + mac);
+
     return true;
   }
 

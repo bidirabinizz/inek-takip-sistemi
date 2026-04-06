@@ -1,5 +1,7 @@
 from functools import wraps
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from asgiref.sync import async_to_sync
@@ -50,19 +52,18 @@ def require_permission(permission_key):
 # ─────────────────────────────────────────────
 #  SENSÖR API
 # ─────────────────────────────────────────────
-def _process_sensor_data(mac, x, y, z, created_time, rssi=None):
+def _process_sensor_data_batch(mac, x_list, y_list, z_list, mag_list, created_time, rssi=None):
     """
-    Sensör verisini işler:
-    - Aktivite sınıflandırması yapar
+    Sensör verisini işler (batch modu):
+    - Aktivite sınıflandırması yapar (tüm batch için bir kez)
     - Adım sayısını hesaplar
     - Device.total_steps günceller
     - GunlukAktivite kaydını günceller
     """
     settings = SystemSettings.get_instance()
-    mag = math.sqrt(x**2 + y**2 + z**2)
     
-    # Aktivite sınıflandırması
-    activity_type, steps, excited_count = classifyActivityRaw(x, y, z, mag, settings)
+    # Aktivite sınıflandırması (listelerle)
+    activity_type, steps, excited_count = classifyActivityRaw(x_list, y_list, z_list, mag_list, settings)
     
     # Cihaz kayıt/güncelleme
     device, _ = Device.objects.get_or_create(mac_address=mac, defaults={'name': f"İnek-{mac[:8].upper()}"})
@@ -137,72 +138,70 @@ def sensor_api(request):
         data = request.data
 
         if isinstance(data, list):
+            # Assume all items belong to the same device (use MAC from first item)
+            mac = None
             if len(data) > 0:
                 mac = data[0].get('mac')
                 if mac:
                     Device.objects.get_or_create(mac_address=mac, defaults={'name': f"İnek-{mac[:8].upper()}"})
-            
+            # Prepare batch lists
+            x_list, y_list, z_list, mag_list = [], [], [], []
             records = []
-            total_steps = 0
-            total_excited = 0
             for item in data:
                 zaman_str = item.get('zaman')
                 created_time = timezone.now()
-                
                 if zaman_str:
                     parsed_time = parse_datetime(zaman_str.replace(' ', 'T'))
                     if parsed_time:
                         if is_naive(parsed_time):
                             parsed_time = make_aware(parsed_time)
                         created_time = parsed_time
-
-                mac = item.get('mac', 'BİLİNMEYEN_CİHAZ')
+                mac_item = item.get('mac', 'BİLİNMEYEN_CİHAZ')
                 x = item.get('x', 0.0)
                 y = item.get('y', 0.0)
                 z = item.get('z', 0.0)
                 rssi = item.get('rssi')
-                
-                # Aktivite işleme
-                steps, excited, activity = _process_sensor_data(mac, x, y, z, created_time, rssi)
-                total_steps += steps
-                total_excited += excited
-                
+                # Build lists for batch processing
+                x_list.append(x)
+                y_list.append(y)
+                z_list.append(z)
+                mag_list.append(math.sqrt(x**2 + y**2 + z**2))
+                # Prepare DB record
                 records.append(
                     AccelerometerData(
-                        device_mac=mac,
+                        device_mac=mac_item,
                         x=x, y=y, z=z,
                         signal_strength=rssi,
                         created_at=created_time
                     )
                 )
-            
+            # Use the timestamp of the last record for batch DB updates (or now if none)
+            batch_time = records[-1].created_at if records else timezone.now()
+            # Process batch data
+            steps, excited, activity = _process_sensor_data_batch(mac, x_list, y_list, z_list, mag_list, batch_time)
+            # Save all raw records in bulk
             AccelerometerData.objects.bulk_create(records)
-            print(f"[Sensör API] {len(records)} kayıt işlendi. Toplam adım: {total_steps}, Excited: {total_excited}")
-            
-            # WebSocket broadcast gönder - her bir kayıt için ayrı mesaj veya toplu mesaj
+            print(f"[Sensör API] {len(records)} kayıt işlendi. Toplam adım: {steps}, Excited: {excited}")
+            # WebSocket broadcast of the latest record
             channel_layer = get_channel_layer()
-            if channel_layer:
-                # Son kaydı gönder (en yeni veri)
-                if records:
-                    last_record = records[-1]
-                    async_to_sync(channel_layer.group_send)(
-                        'sensor_data',
-                        {
-                            'type': 'sensor_data_update',
-                            'data': {
-                                'mac': last_record.device_mac,
-                                'x': float(last_record.x),
-                                'y': float(last_record.y),
-                                'z': float(last_record.z),
-                                'time': last_record.created_at.isoformat(),
-                                'total_steps': total_steps,
-                                'activity': activity if 'activity' in locals() else None
-                            }
+            if channel_layer and records:
+                last_record = records[-1]
+                async_to_sync(channel_layer.group_send)(
+                    'sensor_data',
+                    {
+                        'type': 'sensor_data_update',
+                        'data': {
+                            'mac': last_record.device_mac,
+                            'x': float(last_record.x),
+                            'y': float(last_record.y),
+                            'z': float(last_record.z),
+                            'time': last_record.created_at.isoformat(),
+                            'total_steps': steps,
+                            'activity': activity,
                         }
-                    )
-            
-            return Response({"status": "success", "count": len(records), "steps": total_steps}, status=201)
-            
+                    }
+                )
+            return Response({"status": "success", "count": len(records), "steps": steps}, status=201)
         else:
             mac = data.get('mac')
             if mac:
@@ -312,6 +311,7 @@ def device_history_range(request):
     """
     Belirli bir tarih aralığında cihazın günlük aktivite verilerini döndürür.
     Parametreler: mac, start_date, end_date
+    Tarihler eksikse varsayılan olarak son 7 gün kullanılır.
     """
     mac = request.GET.get('mac')
     start_date_str = request.GET.get('start_date')
@@ -320,17 +320,31 @@ def device_history_range(request):
     if not mac:
         return Response({"error": "mac parametresi gerekli"}, status=400)
     
+    # Tarihler eksik veya boşsa varsayılan değerler kullan
+    bugun = date.today()
     if not start_date_str or not end_date_str:
-        return Response({"error": "start_date ve end_date parametreleri gerekli"}, status=400)
-    
-    try:
-        start_date = parse_date(start_date_str)
-        end_date = parse_date(end_date_str)
-        
-        if not start_date or not end_date:
-            return Response({"error": "Geçersiz tarih formatı. YYYY-MM-DD kullanın"}, status=400)
-    except Exception:
-        return Response({"error": "Tarih işleme hatası"}, status=400)
+        print("[device_history_range] Tarih parametreleri eksik, varsayılan son 7 gün kullanılıyor.")
+        end_date = bugun
+        start_date = bugun - timedelta(days=7)
+        start_date_str = str(start_date)
+        end_date_str = str(end_date)
+    else:
+        try:
+            start_date = parse_date(start_date_str)
+            end_date = parse_date(end_date_str)
+            
+            if not start_date or not end_date:
+                print("[device_history_range] Geçersiz tarih formatı, varsayılan son 7 gün kullanılıyor.")
+                end_date = bugun
+                start_date = bugun - timedelta(days=7)
+                start_date_str = str(start_date)
+                end_date_str = str(end_date)
+        except Exception:
+            print("[device_history_range] Tarih işleme hatası, varsayılan son 7 gün kullanılıyor.")
+            end_date = bugun
+            start_date = bugun - timedelta(days=7)
+            start_date_str = str(start_date)
+            end_date_str = str(end_date)
     
     # GunlukAktivite kayıtlarını getir
     kayitlar = GunlukAktivite.objects.filter(
@@ -730,19 +744,17 @@ def cihazlar_heatmap(request):
         alert_param = request.GET.get('alert', 'all')
         bugun = date.today()
         
-        # N+1 SORUNU ÇÖZÜLDÜ: Tek soruyla tüm cihazlar ve bugünkü aktiviteleri al
-        devices = Device.objects.prefetch_related(
-            Prefetch(
-                'gunlukaktivite_set',
-                queryset=GunlukAktivite.objects.filter(tarih=bugun),
-                to_attr='today_aktivite'
-            )
-        ).all()
+        # N+1 SORUNU ÇÖZÜLDÜ: Python dictionary map ile
+        # GunlukAktivite ForeignKey değil, CharField (mac) kullandığı için prefetch_related çalışmıyor
+        activities = GunlukAktivite.objects.filter(tarih=bugun)
+        activity_map = {act.mac: act for act in activities}
+        
+        devices = Device.objects.all()
         
         res_data = []
         for d in devices:
-            # Prefetch'ten bugünkü aktiviteyi al
-            aktivite = d.today_aktivite[0] if d.today_aktivite else None
+            # Dictionary'den bugünkü aktiviteyi al
+            aktivite = activity_map.get(d.mac_address)
             
             # 🚀 EMNİYET KİLİDİ: last_seen None ise hata vermesin
             is_online = False
@@ -882,6 +894,8 @@ def update_settings(request):
 #  KULLANICI YÖNETİMİ — Login & Logout
 # ─────────────────────────────────────────────
 @api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def custom_login(request):
     """
     Kullanıcı girişi için basit bir endpoint.
@@ -916,6 +930,8 @@ def custom_login(request):
 
 
 @api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def custom_logout(request):
     """
     Kullanıcı çıkışı için endpoint.

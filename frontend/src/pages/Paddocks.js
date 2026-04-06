@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE } from '../config';
 import { usePermission } from '../hooks/usePermission';
+import { useAuth } from '../context/AuthContext';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
@@ -17,7 +18,9 @@ const Paddocks = () => {
     const [selectedPaddock, setSelectedPaddock] = useState(null);
     const [formData, setFormData] = useState({ name: '', description: '', capacity: 0 });
 
+    const { userRole } = useAuth();
     const canManagePaddocks = usePermission('manage_paddocks');
+    const hasAccess = userRole === 'ADMIN' || canManagePaddocks;
 
     useEffect(() => {
         fetchPaddocks();
@@ -93,7 +96,7 @@ const Paddocks = () => {
         <div className="p-4 md:p-6 max-w-7xl mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                 <h1 className="text-2xl md:text-3xl font-bold text-white">🏠 Padok Yönetimi</h1>
-                {canManagePaddocks && (
+                {hasAccess && (
                     <button 
                         onClick={handleOpenAddModal}
                         className="bg-cyber-green hover:bg-green-500 text-black px-4 py-2 rounded-xl flex items-center gap-2 transition"
@@ -187,7 +190,7 @@ const Paddocks = () => {
                     <div key={paddock.id} className="bg-cyber-dark/80 border border-cyber-green/30 rounded-2xl p-6 hover:shadow-cyber-glow transition duration-300">
                         <div className="flex justify-between items-start mb-4">
                             <h3 className="text-xl font-bold text-cyber-green">{paddock.name}</h3>
-                            {canManagePaddocks && (
+                            {hasAccess && (
                                 <div className="flex gap-2">
                                     <button onClick={() => handleOpenEditModal(paddock)} className="text-cyber-lightGray hover:text-white">
                                         <PencilIcon className="w-5 h-5" />

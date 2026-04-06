@@ -10,7 +10,6 @@ from core.models import SystemSettings, GunlukAktivite, Device
 from django.utils import timezone
 
 # SystemSettings'den dinamik eçilçleri al
-settings = SystemSettings.get_instance()
 
 # Özelçlik fonksiyonlarí
 def movingAverage(data, window_size):
@@ -49,24 +48,33 @@ def detectSteps(mag_values, threshold):
     return count
 
 def classifyActivityRaw(x, y, z, mag, settings):
-    """Aktivité tülumlüğı
+    """Handles both scalar and list inputs for batch processing.
     Args:
-        x, y, z (float): Sensör verileri
-        mag (float): Magnitude
+        x, y, z (float or list): Sensor values
+        mag (float or list): Magnitude
         settings (object): SystemSettings instance
     Returns:
         tuple: (activity_type, steps, excited_count)
     """
+    # Ensure inputs are lists
+    if not isinstance(x, list):
+        x = [x]
+    if not isinstance(y, list):
+        y = [y]
+    if not isinstance(z, list):
+        z = [z]
+    if not isinstance(mag, list):
+        mag = [mag]
     # Yatay hareket hesaplama
-    horizontal = math.sqrt(x**2 + y**2)
+    horizontal = [math.sqrt(xi**2 + yi**2) for xi, yi in zip(x, y)]
     # Yatay hareket ortalaması
-    horiz_avg = movingAverage([horizontal] * settings.WINDOW_SIZE, settings.WINDOW_SIZE)
+    horiz_avg = movingAverage(horizontal, settings.WINDOW_SIZE)
     # Standart sapma
-    horiz_std = stdDev([horizontal] * settings.WINDOW_SIZE)
+    horiz_std = stdDev(horizontal)
     # Magnitude eçiklimi
     mag_peak = max(mag) if mag else 0
     # Adım tespiti
-    steps = detectSteps([mag] * settings.WINDOW_SIZE, settings.MAG_PEAK_THRESHOLD)
+    steps = detectSteps(mag, settings.MAG_PEAK_THRESHOLD)
     # Küzgünlük tespiti
     excited = 1 if mag_peak > settings.EXCITED_MAG else 0
     # Aktivite tülumlüğı
