@@ -12,11 +12,11 @@ from .models import (
     RolePermission, ALL_PERMISSIONS
 )
 from django.contrib.auth.models import User
-from django.db.models import Sum, Count, Prefetch
+from django.db.models import Sum, Count, Prefetch, F
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime, parse_date
 from django.utils.timezone import make_aware, is_naive, localtime
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import math
 from .activity_processor import classifyActivityRaw
 
@@ -67,20 +67,48 @@ def _process_sensor_data_batch(mac, x_list, y_list, z_list, mag_list, created_ti
     
     # Cihaz kayıt/güncelleme
     device, _ = Device.objects.get_or_create(mac_address=mac, defaults={'name': f"İnek-{mac[:8].upper()}"})
-    device.total_steps += steps
+    device.total_steps = F('total_steps') + steps
     device.last_seen = created_time
     device.save()
+    device.refresh_from_db()
     
     # Günlük aktivite güncelleme
     bugun = created_time.date() if hasattr(created_time, 'date') else date.today()
     saat = created_time.hour if hasattr(created_time, 'hour') else timezone.now().hour
     gece_mi = saat >= settings.LYING_NIGHT_START or saat < settings.LYING_NIGHT_END
     
-    kayit, _ = GunlukAktivite.objects.get_or_create(mac=mac, tarih=bugun)
-    kayit.toplam_adim += steps
-    kayit.excited_count += excited_count
+    kayit, created = GunlukAktivite.objects.get_or_create(mac=mac, tarih=bugun)
+    if created:
+        # Carry‑over logic for a new daily record
+        from django.utils.timezone import make_aware, timezone
+        import datetime
+        # Find yesterday's record
+        yesterday = bugun - datetime.timedelta(days=1)
+        eski_kayit = GunlukAktivite.objects.filter(mac=mac, tarih=yesterday).first()
+        if eski_kayit:
+            # Midnight of today (timezone‑aware)
+            midnight_naive = datetime.datetime.combine(bugun, datetime.time.min)
+            midnight = make_aware(midnight_naive) if is_naive(created_time) else make_aware(midnight_naive, timezone.get_current_timezone())
+            # 1. Transfer lying time up to midnight
+            if eski_kayit.lying_start_time:
+                elapsed = int((midnight - eski_kayit.lying_start_time).total_seconds() / 60)
+                eski_kayit.yatma_suresi_dk += max(0, elapsed)
+                eski_kayit.lying_start_time = None
+                kayit.lying_start_time = midnight
+            # 2. Transfer still time
+            if eski_kayit.still_start_time:
+                eski_kayit.still_start_time = None
+                kayit.still_start_time = midnight
+            # 3. Transfer last activity state
+            kayit.last_activity = eski_kayit.last_activity
+            kayit.last_activity_time = eski_kayit.last_activity_time
+            eski_kayit.save()
+    kayit.toplam_adim = F('toplam_adim') + steps
+    kayit.excited_count = F('excited_count') + excited_count
     if gece_mi:
-        kayit.gece_adim += steps
+        kayit.gece_adim = F('gece_adim') + steps
+    kayit.save()
+    kayit.refresh_from_db()
     
     # STILL kronometresi
     if activity_type == "STILL":
@@ -469,8 +497,9 @@ def update_device_steps(request):
     new_steps = request.data.get('steps', 0)
     if mac:
         device, _ = Device.objects.get_or_create(mac_address=mac)
-        device.total_steps += int(new_steps)
+        device.total_steps = F('total_steps') + int(new_steps)
         device.save()
+        device.refresh_from_db()
         return Response({"status": "updated"}, status=200)
     return Response({"error": "No MAC provided"}, status=400)
 
@@ -549,12 +578,39 @@ def aktivite_guncelle(request):
     saat    = now.hour
     gece_mi = saat >= 22 or saat < 6
 
-    kayit, _ = GunlukAktivite.objects.get_or_create(mac=mac, tarih=bugun)
+    kayit, created = GunlukAktivite.objects.get_or_create(mac=mac, tarih=bugun)
+    if created:
+        # Carry‑over logic for a new daily record
+        from django.utils.timezone import make_aware, timezone
+        import datetime
+        # Find yesterday's record
+        yesterday = bugun - datetime.timedelta(days=1)
+        eski_kayit = GunlukAktivite.objects.filter(mac=mac, tarih=yesterday).first()
+        if eski_kayit:
+            # Midnight of today (timezone‑aware)
+            midnight_naive = datetime.datetime.combine(bugun, datetime.time.min)
+            midnight = make_aware(midnight_naive) if is_naive(created_time) else make_aware(midnight_naive, timezone.get_current_timezone())
+            # 1. Transfer lying time up to midnight
+            if eski_kayit.lying_start_time:
+                elapsed = int((midnight - eski_kayit.lying_start_time).total_seconds() / 60)
+                eski_kayit.yatma_suresi_dk += max(0, elapsed)
+                eski_kayit.lying_start_time = None
+                kayit.lying_start_time = midnight
+            # 2. Transfer still time
+            if eski_kayit.still_start_time:
+                eski_kayit.still_start_time = None
+                kayit.still_start_time = midnight
+            # 3. Transfer last activity state
+            kayit.last_activity = eski_kayit.last_activity
+            kayit.last_activity_time = eski_kayit.last_activity_time
+            eski_kayit.save()
 
-    kayit.toplam_adim   += steps
-    kayit.excited_count += (1 if raw_activity == "EXCITED" else 0)
+    kayit.toplam_adim = F('toplam_adim') + steps
+    kayit.excited_count = F('excited_count') + (1 if raw_activity == "EXCITED" else 0)
     if gece_mi:
-        kayit.gece_adim += steps
+        kayit.gece_adim = F('gece_adim') + steps
+    kayit.save()
+    kayit.refresh_from_db()
     if steps == 0 and raw_activity in ["WALKING", "EXCITED"]:
         raw_activity = "STILL"
 

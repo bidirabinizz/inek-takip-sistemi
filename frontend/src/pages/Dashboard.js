@@ -58,6 +58,7 @@ export default function Dashboard() {
   const wsRef = useRef(null);
   const stillnessTimerRef = useRef(null);
   const stillnessStartTimeRef = useRef(null);
+  const dataBuffer = useRef([]);
 
   useEffect(() => {
     fetchSettings();
@@ -72,6 +73,20 @@ export default function Dashboard() {
     }, 1000);
     return () => clearInterval(interval);
   }, [isStill]);
+
+  // Buffer flush interval - flushes dataBuffer to chartData every 1000ms
+  useEffect(() => {
+    const flushInterval = setInterval(() => {
+      if (dataBuffer.current.length > 0) {
+        setChartData(prev => {
+          const updated = [...prev, ...dataBuffer.current];
+          dataBuffer.current = []; // Clear buffer after flushing
+          return updated.slice(-300);
+        });
+      }
+    }, 1000);
+    return () => clearInterval(flushInterval);
+  }, []);
 
   useEffect(() => {
     resetStillnessTimer();
@@ -267,17 +282,14 @@ export default function Dashboard() {
                 const now = new Date();
                 const timeLabel = now.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
                 
-                setChartData(prev => {
-                  const newPoint = {
-                    timeLabel,
-                    rawMag: parseFloat(Math.sqrt(data.x**2 + data.y**2 + data.z**2).toFixed(3)),
-                    z: parseFloat(data.z.toFixed(3)),
-                    x: parseFloat(data.x.toFixed(3)),
-                    y: parseFloat(data.y.toFixed(3)),
-                  };
-                  const updatedData = [...prev, newPoint];
-                  return updatedData.slice(-300);
-                });
+                const newPoint = {
+                  timeLabel,
+                  rawMag: parseFloat(Math.sqrt(data.x**2 + data.y**2 + data.z**2).toFixed(3)),
+                  z: parseFloat(data.z.toFixed(3)),
+                  x: parseFloat(data.x.toFixed(3)),
+                  y: parseFloat(data.y.toFixed(3)),
+                };
+                dataBuffer.current.push(newPoint);
                 setTick(prevTick => prevTick + 1);
 
                 const mag = Math.sqrt(data.x**2 + data.y**2 + data.z**2);
