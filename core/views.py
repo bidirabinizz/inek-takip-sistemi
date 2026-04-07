@@ -829,7 +829,8 @@ def cihazlar_heatmap(request):
                 "kizginlik_skoru": aktivite.kizginlik_skoru if aktivite else 0,
                 "total_steps": d.total_steps,
                 "status": "online" if is_online else "offline",
-                "alarm": aktivite.kizginlik_alarm if aktivite else False
+                "alarm": aktivite.kizginlik_alarm if aktivite else False,
+                "last_activity_time": aktivite.last_activity_time.isoformat() if aktivite and aktivite.last_activity_time else None
             }
             # Include animal information if assigned
             if d.animal:

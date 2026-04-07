@@ -1,5 +1,44 @@
 import React from 'react';
 
+// Helper: Calculate insemination window (12-18 hours after heat detection)
+const calculateInseminationWindow = (lastActivityTime) => {
+  if (!lastActivityTime) return null;
+  
+  const detectionTime = new Date(lastActivityTime);
+  const windowStart = new Date(detectionTime.getTime() + 12 * 60 * 60 * 1000);
+  const windowEnd = new Date(detectionTime.getTime() + 18 * 60 * 60 * 1000);
+  
+  const now = new Date();
+  
+  // Check if we're currently within the window
+  const isWithinWindow = now >= windowStart && now <= windowEnd;
+  const isPast = now > windowEnd;
+  const isFuture = now < windowStart;
+  
+  // Calculate countdown if within window
+  let countdown = null;
+  if (isWithinWindow) {
+    const remainingMs = windowEnd.getTime() - now.getTime();
+    const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000));
+    const remainingMins = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+    countdown = `${remainingHours}s ${remainingMins}dk`;
+  }
+  
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  return {
+    windowStart: formatTime(windowStart),
+    windowEnd: formatTime(windowEnd),
+    isWithinWindow,
+    isPast,
+    isFuture,
+    countdown,
+    hoursUntilStart: isFuture ? Math.max(0, Math.floor((windowStart.getTime() - now.getTime()) / (60 * 60 * 1000))) : 0,
+  };
+};
+
 export default function AlarmTable({ alarmDevices }) {
   if (!alarmDevices || alarmDevices.length === 0) return null;
 
@@ -26,63 +65,101 @@ export default function AlarmTable({ alarmDevices }) {
               <th className="py-3 px-4 text-left text-rose-400 font-semibold tracking-wide">CİHAZ</th>
               <th className="py-3 px-4 text-left text-rose-400 font-semibold tracking-wide">HAYVAN</th>
               <th className="py-3 px-4 text-left text-rose-400 font-semibold tracking-wide">KIZGINLIK SKORU</th>
+              <th className="py-3 px-4 text-left text-rose-400 font-semibold tracking-wide">TOHUMLAMA PENCERESİ</th>
               <th className="py-3 px-4 text-left text-rose-400 font-semibold tracking-wide">DURUM</th>
             </tr>
           </thead>
           <tbody>
-            {alarmDevices.map((device, idx) => (
-              <tr 
-                key={device.mac} 
-                className={idx < alarmDevices.length - 1 ? "border-b border-rose-500/10" : ""}
-              >
-                <td className="py-3 px-4 text-slate-200 font-mono">{device.name}</td>
-                <td className="py-3 px-4 text-slate-300">
-                  {device.animal ? (
-                    <div>
-                      <div className="font-semibold">{device.animal.ear_tag}</div>
-                      <div className="text-[11px] text-slate-400">{device.animal.name || '-'}</div>
+            {alarmDevices.map((device, idx) => {
+              const insemWindow = calculateInseminationWindow(device.last_activity_time);
+              
+              return (
+                <tr
+                  key={device.mac}
+                  className={idx < alarmDevices.length - 1 ? "border-b border-rose-500/10" : ""}
+                >
+                  <td className="py-3 px-4 text-slate-200 font-mono">{device.name}</td>
+                  <td className="py-3 px-4 text-slate-300">
+                    {device.animal ? (
+                      <div>
+                        <div className="font-semibold">{device.animal.ear_tag}</div>
+                        <div className="text-[11px] text-slate-400">{device.animal.name || '-'}</div>
+                      </div>
+                    ) : '-'}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-rose-400" />
+                      <span className="text-rose-400 font-bold text-base">{device.kizginlik_skoru?.toFixed(0)}</span>
                     </div>
-                  ) : '-'}
-                </td>
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-rose-400" />
-                    <span className="text-rose-400 font-bold text-base">{device.kizginlik_skoru?.toFixed(0)}</span>
-                  </div>
-                </td>
-                <td className="py-3 px-4">
-                  <span className="bg-rose-500/15 border border-rose-500/40 text-rose-400 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide">
-                    ALARM
-                  </span>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="py-3 px-4">
+                    {insemWindow ? (
+                      <div className="flex flex-col">
+                        <span className={`text-xs font-semibold ${insemWindow.isWithinWindow ? 'text-green-400' : insemWindow.isPast ? 'text-slate-500' : 'text-blue-400'}`}>
+                          {insemWindow.windowStart} - {insemWindow.windowEnd}
+                        </span>
+                        {insemWindow.isWithinWindow && (
+                          <span className="text-[10px] text-green-400">
+                            Kalan: {insemWindow.countdown}
+                          </span>
+                        )}
+                        {insemWindow.isFuture && (
+                          <span className="text-[10px] text-blue-400">
+                            {insemWindow.hoursUntilStart}s saat sonra
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 text-xs">-</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="bg-rose-500/15 border border-rose-500/40 text-rose-400 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide">
+                      ALARM
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Mobile Card View */}
       <div className="md:hidden space-y-3">
-        {alarmDevices.map((device, idx) => (
-          <div key={device.mac} className={`bg-slate-800/50 border border-rose-500/20 rounded-lg p-4 ${idx < alarmDevices.length - 1 ? 'mb-3' : ''}`}>
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <p className="font-mono text-slate-200 font-semibold text-sm">{device.name}</p>
-                {device.animal && (
-                  <p className="text-xs text-slate-400">{device.animal.ear_tag} {device.animal.name && `- ${device.animal.name}`}</p>
-                )}
+        {alarmDevices.map((device, idx) => {
+          const insemWindow = calculateInseminationWindow(device.last_activity_time);
+          
+          return (
+            <div key={device.mac} className={`bg-slate-800/50 border border-rose-500/20 rounded-lg p-4 ${idx < alarmDevices.length - 1 ? 'mb-3' : ''}`}>
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <p className="font-mono text-slate-200 font-semibold text-sm">{device.name}</p>
+                  {device.animal && (
+                    <p className="text-xs text-slate-400">{device.animal.ear_tag} {device.animal.name && `- ${device.animal.name}`}</p>
+                  )}
+                </div>
+                <span className="bg-rose-500/15 border border-rose-500/40 text-rose-400 px-2 py-1 rounded text-xs font-semibold">ALARM</span>
               </div>
-              <span className="bg-rose-500/15 border border-rose-500/40 text-rose-400 px-2 py-1 rounded text-xs font-semibold">ALARM</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-400">Kızgınlık Skoru:</span>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-rose-400" />
-                <span className="text-rose-400 font-bold">{device.kizginlik_skoru?.toFixed(0)}</span>
+              <div className="flex items-center justify-between text-sm mb-2">
+                <span className="text-slate-400">Kızgınlık Skoru:</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-rose-400" />
+                  <span className="text-rose-400 font-bold">{device.kizginlik_skoru?.toFixed(0)}</span>
+                </div>
               </div>
+              {insemWindow && (
+                <div className={`text-xs font-semibold ${insemWindow.isWithinWindow ? 'text-green-400' : insemWindow.isPast ? 'text-slate-500' : 'text-blue-400'}`}>
+                  Tohumlama Penceresi: {insemWindow.windowStart} - {insemWindow.windowEnd}
+                  {insemWindow.isWithinWindow && (
+                    <span className="ml-2 text-green-400">(Kalan: {insemWindow.countdown})</span>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -84,6 +84,8 @@ export default function Dashboard() {
           dataBuffer.current = []; // Clear buffer after flushing
           return updated.slice(-300);
         });
+        // Throttle re-renders: increment tick only once per flush
+        setTick(prevTick => prevTick + 1);
       }
     }, 1000);
     return () => clearInterval(flushInterval);
@@ -292,7 +294,6 @@ export default function Dashboard() {
                   y: parseFloat(data.y.toFixed(3)),
                 };
                 dataBuffer.current.push(newPoint);
-                setTick(prevTick => prevTick + 1);
 
                 const mag = Math.sqrt(data.x**2 + data.y**2 + data.z**2);
                 const std = calculateStdDev([data.x, data.y, data.z]);
