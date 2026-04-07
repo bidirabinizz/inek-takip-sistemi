@@ -4,14 +4,14 @@ from datetime import timedelta
 from core.models import AccelerometerData
 
 class Command(BaseCommand):
-    help = '7 günden eski sensör verilerini temizler'
+    help = '24 saatten eski sensör verilerini temizler'
 
     def handle(self, *args, **options):
-        # 7 gün önceki tarih
-        cutoff_date = timezone.now() - timedelta(days=7)
+        # 24 saat önceki tarih
+        cutoff = timezone.now() - timedelta(hours=24)
         
         # Silinecek kayıt sayısını bul
-        old_records = AccelerometerData.objects.filter(created_at__lt=cutoff_date)
+        old_records = AccelerometerData.objects.filter(created_at__lt=cutoff)
         count = old_records.count()
         
         if count == 0:
@@ -22,5 +22,5 @@ class Command(BaseCommand):
         old_records.delete()
         
         self.stdout.write(
-            self.style.SUCCESS(f'Başarıyla {count} eski kayıt silindi (7 günden eski).')
+            self.style.SUCCESS(f'Başarıyla {count} eski kayıt silindi (24 saatten eski).')
         )

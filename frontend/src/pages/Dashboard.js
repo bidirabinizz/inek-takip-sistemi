@@ -59,6 +59,7 @@ export default function Dashboard() {
   const stillnessTimerRef = useRef(null);
   const stillnessStartTimeRef = useRef(null);
   const dataBuffer = useRef([]);
+  const reconnectAttempts = useRef(0);
 
   useEffect(() => {
     fetchSettings();
@@ -259,6 +260,7 @@ export default function Dashboard() {
 
       ws.onopen = () => {
         console.log("[WebSocket] Bağlantı kabul edildi.");
+        reconnectAttempts.current = 0;
         setStatus("live");
       };
 
@@ -312,11 +314,18 @@ export default function Dashboard() {
         console.log(`[WebSocket] Bağlantı kapandı. Kod: ${event.code}`);
         setStatus("connecting");
         
+        reconnectAttempts.current += 1;
+        const baseDelay = 3000;
+        const maxDelay = 60000;
+        const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.current), maxDelay);
+        
+        console.log(`[WebSocket] Yeniden bağlanılıyor... Deneme: ${reconnectAttempts.current}, Bekleme: ${delay}ms`);
+        
         setTimeout(() => {
           if (wsRef.current?.readyState === WebSocket.CLOSED) {
             connectWebSocket();
           }
-        }, 3000);
+        }, delay);
       };
     };
 

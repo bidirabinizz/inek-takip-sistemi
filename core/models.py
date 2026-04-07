@@ -112,6 +112,7 @@ class GunlukAktivite(models.Model):
     # bu alan null yapılır. Böylece tüm cihazlar aynı veriyi görür.
     lying_start_time = models.DateTimeField(null=True, blank=True)
     still_start_time = models.DateTimeField(null=True, blank=True) # YENİ EKLENEN KRONOMETRE
+    animal = models.ForeignKey('Animal', on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_activities', help_text="Bu verinin ait olduğu hayvan")
     
     class Meta:
         db_table        = 'GunlukAktivite'

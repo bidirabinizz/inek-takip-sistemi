@@ -50,6 +50,88 @@ def require_permission(permission_key):
 
 
 # ─────────────────────────────────────────────
+#  YARDIMCI — Günlük Aktivite Zamanlayıcıları
+# ─────────────────────────────────────────────
+def update_daily_activity_timers(kayit, created, mac, current_time, raw_activity, settings=None, data_start=None, data_end=None):
+    """
+    Handles Day Rollover (carry-over) and STILL/LYING timer logic.
+    Returns: (kayit, is_lying, still_mins)
+    """
+    from django.utils.timezone import make_aware
+    import datetime
+
+    bugun = current_time.date() if hasattr(current_time, 'date') else date.today()
+
+    # ── Day Rollover (Carry-Over) Logic ──
+    if created:
+        yesterday = bugun - datetime.timedelta(days=1)
+        eski_kayit = GunlukAktivite.objects.filter(mac=mac, tarih=yesterday).first()
+        if eski_kayit:
+            midnight_naive = datetime.datetime.combine(bugun, datetime.time.min)
+            midnight = make_aware(midnight_naive) if is_naive(current_time) else make_aware(midnight_naive, timezone.get_current_timezone())
+
+            # 1. Transfer lying time up to midnight
+            if eski_kayit.lying_start_time:
+                elapsed = int((midnight - eski_kayit.lying_start_time).total_seconds() / 60)
+                eski_kayit.yatma_suresi_dk += max(0, elapsed)
+                eski_kayit.lying_start_time = None
+                kayit.lying_start_time = midnight
+
+            # 2. Transfer still time
+            if eski_kayit.still_start_time:
+                eski_kayit.still_start_time = None
+                kayit.still_start_time = midnight
+
+            # 3. Transfer last activity state
+            kayit.last_activity = eski_kayit.last_activity
+            kayit.last_activity_time = eski_kayit.last_activity_time
+            eski_kayit.save()
+
+    # ── STILL kronometresi ──
+    if raw_activity == "STILL":
+        if not kayit.still_start_time:
+            if data_start:
+                parsed = parse_datetime(data_start)
+                kayit.still_start_time = parsed if parsed else current_time
+            else:
+                kayit.still_start_time = current_time
+    else:
+        if kayit.still_start_time:
+            kayit.still_start_time = None
+        if kayit.lying_start_time:
+            elapsed = int((current_time - kayit.lying_start_time).total_seconds() / 60)
+            kayit.yatma_suresi_dk += elapsed
+            kayit.lying_start_time = None
+
+    # ── LYING yönetimi ──
+    still_mins = 0
+    if kayit.still_start_time:
+        ref_time = parse_datetime(data_end) if data_end else current_time
+        still_mins = int((ref_time - kayit.still_start_time).total_seconds() / 60)
+
+    # Determine night time and lying threshold
+    if settings:
+        gece_mi = current_time.hour >= settings.LYING_NIGHT_START or current_time.hour < settings.LYING_NIGHT_END
+        lying_threshold = settings.LYING_STILL_MIN_MINUTES
+    else:
+        gece_mi = current_time.hour >= 22 or current_time.hour < 6
+        lying_threshold = 10
+
+    is_lying = gece_mi or (raw_activity == "STILL" and still_mins >= lying_threshold)
+
+    if is_lying:
+        if not kayit.lying_start_time:
+            kayit.lying_start_time = kayit.still_start_time or current_time
+    else:
+        if kayit.lying_start_time:
+            elapsed = int((current_time - kayit.lying_start_time).total_seconds() / 60)
+            kayit.yatma_suresi_dk += elapsed
+            kayit.lying_start_time = None
+
+    return kayit, is_lying, still_mins
+
+
+# ─────────────────────────────────────────────
 #  SENSÖR API
 # ─────────────────────────────────────────────
 def _process_sensor_data_batch(mac, x_list, y_list, z_list, mag_list, created_time, rssi=None):
@@ -78,66 +160,26 @@ def _process_sensor_data_batch(mac, x_list, y_list, z_list, mag_list, created_ti
     gece_mi = saat >= settings.LYING_NIGHT_START or saat < settings.LYING_NIGHT_END
     
     kayit, created = GunlukAktivite.objects.get_or_create(mac=mac, tarih=bugun)
-    if created:
-        # Carry‑over logic for a new daily record
-        from django.utils.timezone import make_aware, timezone
-        import datetime
-        # Find yesterday's record
-        yesterday = bugun - datetime.timedelta(days=1)
-        eski_kayit = GunlukAktivite.objects.filter(mac=mac, tarih=yesterday).first()
-        if eski_kayit:
-            # Midnight of today (timezone‑aware)
-            midnight_naive = datetime.datetime.combine(bugun, datetime.time.min)
-            midnight = make_aware(midnight_naive) if is_naive(created_time) else make_aware(midnight_naive, timezone.get_current_timezone())
-            # 1. Transfer lying time up to midnight
-            if eski_kayit.lying_start_time:
-                elapsed = int((midnight - eski_kayit.lying_start_time).total_seconds() / 60)
-                eski_kayit.yatma_suresi_dk += max(0, elapsed)
-                eski_kayit.lying_start_time = None
-                kayit.lying_start_time = midnight
-            # 2. Transfer still time
-            if eski_kayit.still_start_time:
-                eski_kayit.still_start_time = None
-                kayit.still_start_time = midnight
-            # 3. Transfer last activity state
-            kayit.last_activity = eski_kayit.last_activity
-            kayit.last_activity_time = eski_kayit.last_activity_time
-            eski_kayit.save()
+    # Assign animal based on current device mapping (Data Lineage fix)
+    current_device = Device.objects.filter(mac_address=mac).first()
+    if current_device and current_device.animal:
+        kayit.animal = current_device.animal
+    
+    # Use helper to handle carry-over and timer logic
+    kayit, is_lying, still_mins = update_daily_activity_timers(
+        kayit=kayit,
+        created=created,
+        mac=mac,
+        current_time=created_time,
+        raw_activity=activity_type,
+        settings=settings
+    )
     kayit.toplam_adim = F('toplam_adim') + steps
     kayit.excited_count = F('excited_count') + excited_count
     if gece_mi:
         kayit.gece_adim = F('gece_adim') + steps
     kayit.save()
     kayit.refresh_from_db()
-    
-    # STILL kronometresi
-    if activity_type == "STILL":
-        if not kayit.still_start_time:
-            kayit.still_start_time = created_time
-    else:
-        if kayit.still_start_time:
-            kayit.still_start_time = None
-            
-        if kayit.lying_start_time:
-            elapsed = int((created_time - kayit.lying_start_time).total_seconds() / 60)
-            kayit.yatma_suresi_dk += elapsed
-            kayit.lying_start_time = None
-    
-    # LYING yönetimi
-    still_mins = 0
-    if kayit.still_start_time:
-        still_mins = int((created_time - kayit.still_start_time).total_seconds() / 60)
-    
-    is_lying = gece_mi or (activity_type == "STILL" and still_mins >= settings.LYING_STILL_MIN_MINUTES)
-    
-    if is_lying:
-        if not kayit.lying_start_time:
-            kayit.lying_start_time = kayit.still_start_time or created_time
-    else:
-        if kayit.lying_start_time:
-            elapsed = int((created_time - kayit.lying_start_time).total_seconds() / 60)
-            kayit.yatma_suresi_dk += elapsed
-            kayit.lying_start_time = None
     
     # Final aktivite kararı
     if activity_type == "EXCITED":
@@ -578,75 +620,35 @@ def aktivite_guncelle(request):
     saat    = now.hour
     gece_mi = saat >= 22 or saat < 6
 
+    # Convert WALKING/EXCITED with zero steps to STILL before processing
+    if steps == 0 and raw_activity in ["WALKING", "EXCITED"]:
+        raw_activity = "STILL"
+    
+    # Get or create daily activity record
     kayit, created = GunlukAktivite.objects.get_or_create(mac=mac, tarih=bugun)
-    if created:
-        # Carry‑over logic for a new daily record
-        from django.utils.timezone import make_aware, timezone
-        import datetime
-        # Find yesterday's record
-        yesterday = bugun - datetime.timedelta(days=1)
-        eski_kayit = GunlukAktivite.objects.filter(mac=mac, tarih=yesterday).first()
-        if eski_kayit:
-            # Midnight of today (timezone‑aware)
-            midnight_naive = datetime.datetime.combine(bugun, datetime.time.min)
-            midnight = make_aware(midnight_naive) if is_naive(created_time) else make_aware(midnight_naive, timezone.get_current_timezone())
-            # 1. Transfer lying time up to midnight
-            if eski_kayit.lying_start_time:
-                elapsed = int((midnight - eski_kayit.lying_start_time).total_seconds() / 60)
-                eski_kayit.yatma_suresi_dk += max(0, elapsed)
-                eski_kayit.lying_start_time = None
-                kayit.lying_start_time = midnight
-            # 2. Transfer still time
-            if eski_kayit.still_start_time:
-                eski_kayit.still_start_time = None
-                kayit.still_start_time = midnight
-            # 3. Transfer last activity state
-            kayit.last_activity = eski_kayit.last_activity
-            kayit.last_activity_time = eski_kayit.last_activity_time
-            eski_kayit.save()
-
+    
+    # Assign animal based on current device mapping (Data Lineage fix)
+    current_device = Device.objects.filter(mac_address=mac).first()
+    if current_device and current_device.animal:
+        kayit.animal = current_device.animal
+    
+    # Use helper to handle carry-over and timer logic
+    kayit, is_lying, still_mins = update_daily_activity_timers(
+        kayit=kayit,
+        created=created,
+        mac=mac,
+        current_time=now,
+        raw_activity=raw_activity,
+        settings=None,  # aktivite_guncelle uses inline gece_mi calculation (22-6)
+        data_start=data_start,
+        data_end=data_end
+    )
     kayit.toplam_adim = F('toplam_adim') + steps
     kayit.excited_count = F('excited_count') + (1 if raw_activity == "EXCITED" else 0)
     if gece_mi:
         kayit.gece_adim = F('gece_adim') + steps
     kayit.save()
     kayit.refresh_from_db()
-    if steps == 0 and raw_activity in ["WALKING", "EXCITED"]:
-        raw_activity = "STILL"
-
-    # STILL kronometresi
-    if raw_activity == "STILL":
-        if not kayit.still_start_time:
-            if data_start:
-                parsed = parse_datetime(data_start)
-                kayit.still_start_time = parsed if parsed else now
-            else:
-                kayit.still_start_time = now
-    else:
-        if kayit.still_start_time:
-            kayit.still_start_time = None
-            
-        if kayit.lying_start_time:
-            elapsed = int((now - kayit.lying_start_time).total_seconds() / 60)
-            kayit.yatma_suresi_dk += elapsed
-            kayit.lying_start_time = None
-
-    # LYING yönetimi
-    still_mins = 0
-    if kayit.still_start_time:
-        ref_time   = parse_datetime(data_end) if data_end else now
-        still_mins = int((ref_time - kayit.still_start_time).total_seconds() / 60)
-
-    is_lying = gece_mi or (raw_activity == "STILL" and still_mins >= 10)
-
-    if is_lying:
-        if not kayit.lying_start_time:
-            kayit.lying_start_time = kayit.still_start_time or now
-    else:
-        if kayit.lying_start_time:
-            elapsed = int((now - kayit.lying_start_time).total_seconds() / 60)
-            kayit.yatma_suresi_dk += elapsed
-            kayit.lying_start_time = None
 
     # Final aktivite kararı
     if raw_activity == "EXCITED":
