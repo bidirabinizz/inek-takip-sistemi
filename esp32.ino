@@ -152,6 +152,11 @@ void setup() {
       int winIdx = 0;
       int filled = 0;
 
+      // ─── RAM Tamponu: LittleFS'e yazmadan önce biriktir ───
+      // jsonBuffer ve bufferPos global değişkenlerini kullanıyoruz
+      bufferPos = 0;
+      jsonBuffer[0] = '\0';
+
       while (idle_counter < IDLE_TIMEOUT_COUNT) {
         // 1. Sensörü SADECE BURADA 1 kere oku
         sensors_event_t event;
@@ -184,10 +189,10 @@ void setup() {
             }
         }
 
-        // 4. Veriyi zaman kaybetmeden JSON olarak yaz
+        // 4. Veriyi RAM tamponuna ekle (LittleFS'e yazma!)
         struct timeval now_tv;
         gettimeofday(&now_tv, NULL);
-        struct tm *ti = gmtime(&now_tv.tv_sec); 
+        struct tm *ti = gmtime(&now_tv.tv_sec);
 
         char timeStr[40];
         snprintf(timeStr, sizeof(timeStr),
@@ -197,18 +202,38 @@ void setup() {
                  (int)(now_tv.tv_usec / 1000));
 
         char item[200];
-        snprintf(item, sizeof(item),
+        int itemLen = snprintf(item, sizeof(item),
          "{\"mac\":\"%s\",\"x\":%.3f,\"y\":%.3f,\"z\":%.3f,"
          "\"rssi\":-55,\"zaman\":\"%s\"}\n",
          deviceMac, ax, ay, az, timeStr);
 
-        file.print(item);
+        // RAM tamponuna ekle
+        if (bufferPos + itemLen < sizeof(jsonBuffer) - 1) {
+            memcpy(jsonBuffer + bufferPos, item, itemLen);
+            bufferPos += itemLen;
+            jsonBuffer[bufferPos] = '\0';
+        }
+
+        // 5. RAM tamponu dolduğunda LittleFS'e yaz
+        if (bufferPos >= 2048) {
+            file.write((const uint8_t*)jsonBuffer, bufferPos);
+            bufferPos = 0;
+            jsonBuffer[0] = '\0';
+        }
+
         recorded_lines++;
 
-        // 5. Tam tamına 100ms bekle ve döngüyü tekrarla
+        // 6. Tam tamına 100ms bekle ve döngüyü tekrarla
         delay(READ_INTERVAL);
       }
 
+      // Döngü bitti: kalan veriyi de yaz
+      if (bufferPos > 0) {
+          file.write((const uint8_t*)jsonBuffer, bufferPos);
+          bufferPos = 0;
+          jsonBuffer[0] = '\0';
+      }
+      file.flush();
       file.close();
       Serial.printf("[KAYIT BİTTİ] %d satır kaydedildi.\n", recorded_lines);
     } else {
