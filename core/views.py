@@ -196,7 +196,7 @@ def _process_sensor_data_batch(mac, x_list, y_list, z_list, mag_list, created_ti
     
     kayit.last_activity = final_activity
     kayit.last_activity_time = created_time
-    kayit.kizginlik_skoru = hesapla_kizginlik_skoru(mac, bugun)
+    kayit.kizginlik_skoru = hesapla_kizginlik_skoru(mac, bugun, kayit=kayit)
     kayit.kizginlik_alarm = kayit.kizginlik_skoru >= 60
     kayit.save()
     
@@ -565,7 +565,28 @@ def cihaz_gecmisi(request):
 # ─────────────────────────────────────────────
 #  YARDIMCI — Kızgınlık Skoru
 # ─────────────────────────────────────────────
-def hesapla_kizginlik_skoru(mac, hedef_tarih):
+def hesapla_kizginlik_skoru(mac, hedef_tarih, kayit=None):
+    """
+    Calculates estrus (heat) score for a device/animal.
+    
+    Args:
+        mac: Device MAC address (used for DB queries if kayit not provided)
+        hedef_tarih: Target date (usually today)
+        kayit: Optional GunlukAktivite object. If provided, uses its current values
+               instead of querying the database (for real-time updates).
+    
+    Returns:
+        float: Estrus score (0-100)
+    """
+    # 1. Get today's activity data
+    if kayit is None:
+        bugun = GunlukAktivite.objects.filter(mac=mac, tarih=hedef_tarih).first()
+        if not bugun:
+            return 0.0
+    else:
+        bugun = kayit
+    
+    # 2. Get 7-day baseline for step count
     yedi_gun_once = hedef_tarih - timedelta(days=7)
     gecmis_adimlar = list(
         GunlukAktivite.objects.filter(
@@ -579,21 +600,37 @@ def hesapla_kizginlik_skoru(mac, hedef_tarih):
     baseline = sum(gecmis_adimlar) / len(gecmis_adimlar)
     if baseline == 0:
         return 0.0
-    bugun = GunlukAktivite.objects.filter(mac=mac, tarih=hedef_tarih).first()
-    if not bugun:
-        return 0.0
 
+    # 3. Step increase percentage
     adim_artis_yuzde = (bugun.toplam_adim / baseline) * 100
     skor = 0
     if adim_artis_yuzde > 300:   skor += 50
     elif adim_artis_yuzde > 200: skor += 35
     elif adim_artis_yuzde > 150: skor += 20
+
+    # 4. Night steps
     if bugun.gece_adim > 200:    skor += 30
     elif bugun.gece_adim > 100:  skor += 20
     elif bugun.gece_adim > 50:   skor += 10
+
+    # 5. Excited count
     if bugun.excited_count > 20:  skor += 20
     elif bugun.excited_count > 10: skor += 12
     elif bugun.excited_count > 5:  skor += 6
+
+    # 6. Lying Time Drop (NEW): If today's lying time is < 60% of 7-day average, add 25 points
+    gecmis_yatma_sureleri = list(
+        GunlukAktivite.objects.filter(
+            mac=mac,
+            tarih__gte=yedi_gun_once,
+            tarih__lt=hedef_tarih
+        ).values_list("yatma_suresi_dk", flat=True)
+    )
+    if len(gecmis_yatma_sureleri) >= 3:
+        ortalama_yatma = sum(gecmis_yatma_sureleri) / len(gecmis_yatma_sureleri)
+        if ortalama_yatma > 0 and bugun.yatma_suresi_dk < (ortalama_yatma * 0.6):
+            skor += 25
+
     return min(float(skor), 100.0)
 
 
@@ -671,7 +708,7 @@ def aktivite_guncelle(request):
     if kayit.lying_start_time:
         current_lying_mins += int((now - kayit.lying_start_time).total_seconds() / 60)
 
-    kayit.kizginlik_skoru = hesapla_kizginlik_skoru(mac, bugun)
+    kayit.kizginlik_skoru = hesapla_kizginlik_skoru(mac, bugun, kayit=kayit)
     kayit.kizginlik_alarm = kayit.kizginlik_skoru >= 60
     kayit.save()
 
